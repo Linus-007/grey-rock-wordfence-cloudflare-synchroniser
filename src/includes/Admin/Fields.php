@@ -20,7 +20,7 @@ final class Fields {
   }
 
   public static function register_settings(): void {
-    register_settings('firewall_sync_options_group', 'firwall_sync_options', [
+    register_setting('firewall_sync_options_group', 'firwall_sync_options', [
       'type' => 'array',
       'sanitize_callback' => [self::class, 'sanitize'],
       'default' => []

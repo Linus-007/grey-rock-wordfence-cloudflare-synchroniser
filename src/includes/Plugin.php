@@ -53,8 +53,8 @@ final class Plugin {
 
   private static function load_admin(): void {
     if (is_admin()) {
-      Settings::init();
-      Fields::init();
+      Settings::register();
+      Fields::register();
     }
   }
 
