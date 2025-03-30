@@ -24,6 +24,7 @@ final class BlockLogger {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       expires_at DATETIME DEFAULT NULL,
+      fail_count TINYINT DEFAULT 0,
       PRIMARY KEY (id),
       UNIQUE KEY ip (ip),
       KEY expires_at (expires_at),
@@ -87,5 +88,27 @@ final class BlockLogger {
     $table = $wpdb->prefix . self::TABLE;
 
     return $wpdb->get_col("SELECT ip FROM {$table}");
+  }
+
+  public static function mark_failed(string $ip): void {
+    global $wpdb;
+
+    $table = $wpdb->prefix . self::TABLE;
+
+    $wpdb->query($wpdb->prepare(
+      "INSERT INTO {$table} (ip, fail_count) VALUES (%s, 1) ON DUPLICATE KEY UPDATE fail_count = LEAST(fail_count + 1, 3)",
+      $ip
+    ));
+  }
+
+  public static function is_blacklisted(string $ip): bool {
+    global $wpdb;
+
+    $table = $wpdb->prefix . self::TABLE;
+
+    return (bool) $wpdb->get_var($wpdb->prepare(
+      "SELECT 1 FROM {$table} WHERE ip = %s AND fail_count >= 3",
+      $ip
+    ));
   }
 }

@@ -58,6 +58,7 @@ final class SyncScheduler {
 
     $client = new Client($token, $zone);
     $blocks = \wfBlock::getBlocks();
+    $batch = [];
 
     foreach ($blocks as $block) {
       $ip = $block['ip'] ?? null;
@@ -73,10 +74,20 @@ final class SyncScheduler {
         continue;
       }
 
-      $success = $client->create_block($ip);
+      if (BlockLogger::has_synced($ip) || BlockLogger::is_blacklisted($ip)) {
+        continue;
+      }
 
-      if ($success) {
-        BlockLogger::log($ip, 'sync: ' . $reason, $expires);
+      $batch[] = ['ip' => $ip, 'reason' => $reason];
+    }
+    
+    $failed = $client->batch_block($batch);
+
+    foreach ($batch as $entry) {
+      if (!in_array($entry['ip'], $failed, true)) {
+        BlockLogger::mark_failed($entry['ip']);
+      } else {
+        BlockLogger::log($entry['ip'], 'sync: ' . $entry['reason']);
       }
     }
 

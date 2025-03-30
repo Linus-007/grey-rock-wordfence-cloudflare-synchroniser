@@ -117,4 +117,64 @@ final class Client {
 
     return array_unique($ip_list);
   }
+
+  public function batch_block(array $ips): array {
+    $max_batch = 1000;
+    $chunks = array_chunk($ips, $max_batch);
+    $failed = [];
+
+    foreach ($chunks as $chunk) {
+      $rules = [];
+
+      foreach ($chunk as $entry) {
+        $rules[] = [
+          'mode' => 'block',
+          'configuration' => [
+            'target' => 'ip',
+            'value' => $entry['ip']
+          ],
+          'notes' => __('Wordfence Sync', 'wordfence-cloudflare-sync') . ': ' . ($entry['reason'] ?? __('Unknown', 'wordfence-cloudflare-sync'))
+        ];
+      }
+
+      $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules";
+
+      $response = wp_remote_post($url, [
+        'headers' => $this->get_headers(true),
+        'body' => wp_json_encode(['rules' => $rules])
+      ]);
+
+      if (is_wp_error($response)) {
+        error_log('Cloudflare batch block failed: ' . $response->get_error_message());
+
+        foreach ($chunk as $entry) {
+          $failed[] = $entry['ip'];
+        }
+
+        continue;
+      }
+
+      $body = json_decode(wp_remote_retrieve_body($response, true));
+
+      if (!isset($body['result']) || !is_array($body['result'])) {
+        error_log('Cloudflare batch block: Unexpected response format');
+        
+        foreach ($chunk as $entry) {
+          $failed[] = $entry['ip'];
+        }
+
+        continue;
+      }
+
+      foreach ($body['result'] as $index => $result) {
+        if (!empty($result['errors'])) {
+          $failed[] = $chunk[$index]['ip'];
+          $error_messages = array_column($result['errors'], 'message');
+          error_log("Cloudflare error blocking IP {$chunk[$index]['ip']}: " . implode('; ', $error_messages));
+        }
+      }
+    }
+  
+    return $failed;
+  }
 }
