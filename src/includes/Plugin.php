@@ -46,4 +46,26 @@ final class Plugin {
     SyncScheduler::register();
     BlockLogger::create_table();
   }
+
+  public static function activate(): void {
+    self::define_constants();
+
+    BlockLogger::create_table();
+    SyncScheduler::run_now();
+
+    $options = get_option('firewall_sync_options');
+
+    $client = new Client($options['cloudflare_api_token'], $options['cloudflare_zone_id']);
+
+    SyncScheduler::cleanup_expired($client);
+    SyncScheduler::register();
+  }
+
+  public static function deactivate(): void {
+    $options = get_option('firewall_sync_options');
+    $client = new Client($options['cloudflare_api_token'], $options['cloudflare_zone_id']);
+
+    SyncScheduler::cleanup_expired($client);
+    SyncScheduler::deactivate();
+  }
 }

@@ -15,14 +15,32 @@ final class SyncScheduler {
   public static function register(): void {
     add_action(self::HOOK, [self::class, 'run_now']);
     add_action(self::CLEANUP_HOOK, [self::class, 'run_cleanup']);
+    add_filter('cron_schedules', [self::class, 'custom_intervals']);
+    
+    $minutes = max(5, (int) ($options['sync_interval'] ?? 60));
+    $interval_key = $minutes === 5 ? 'every_5_minutes' : ($minutes === 15 ? 'every_15_minutes' : 'hourly');
 
     if (!wp_next_scheduled(self::HOOK)) {
-      wp_schedule_event(time(), 'hourly', self::HOOK);
+      wp_schedule_event(time(), $interval_key, self::HOOK);
     }
 
     if (!wp_next_scheduled(self::CLEANUP_HOOK)) {
-      wp_schedule_event(time(), 'hourly', self::CLEANUP_HOOK);
+      wp_schedule_event(time(), $interval_key, self::CLEANUP_HOOK);
     }
+  }
+
+  public static function custom_intervals(array $schedules): array {
+    $schedules['every_5_minutes'] = [
+      'interval' => 300,
+      'display' => __('Every 5 Minutes', 'firewall-sync')
+    ];
+
+    $schedules['every_15_minutes'] = [
+      'interval' => 900,
+      'display' => __('Every 15 Minutes', 'firewall-sync')
+    ];
+
+    return $schedules;
   }
 
   public static function run_now(): bool {

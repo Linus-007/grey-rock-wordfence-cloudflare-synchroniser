@@ -34,3 +34,6 @@ add_action('plugins_loaded', static function (): void {
     \WPCF\FirewallSync\Plugin::init();
   }
 });
+
+register_activation_hook(__FILE__, ['WPCF\\FirewallSync\\Plugin', 'activate']);
+register_deactivation_hook(__FILE__, ['WPCF\\FirewallSync\\Plugin', 'deactivate']);

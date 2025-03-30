@@ -22,6 +22,16 @@ final class Settings {
     }
 
     public static function render(): void {
+      $sync_disabled = get_option('firewall_sync_is_running') ? 'disabled' : '';
+      $last_sync = get_option('firewall_sync_last_run');
+      $log_table = new LogTable();
+      $log_table->prepare_items();
+
+      if ($last_sync) {
+        $last_sync_time = date('Y-m-d H:i:s', $last_sync);
+      } else {
+        $last_sync_time = __('Never', 'firewall-sync');
+      }
       ?>
         <div class="wrap">
           <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
@@ -38,24 +48,19 @@ final class Settings {
 
           <hr>
 
-          <?php
-            $last_sync = get_option('firewall_sync_last_run');
-
-            if ($last_sync) {
-              $last_sync_time = date('Y-m-d H:i:s', $last_sync);
-            } else {
-              $last_sync_time = __('Never', 'firewall-sync');
-            }
-          ?>
-
           <h2><?php esc_html_e('Last Sync Time', 'firewall-sync'); ?></h2>
           <p><?php echo esc_html($last_sync_time); ?></p>
 
-          <?php $sync_disabled = get_option('firewall_sync_is_running') ? 'disabled' : ''; ?>
           <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top: 10px;">
             <?php wp_nonce_field('firewall_sync_now', 'firewall_sync_now_nonce'); ?>
             <input type="hidden" name="action" value="firewall_sync_now">
             <?php submit_button('Sync Now', 'primary', 'firewall_sync_now', false, ['disabled' => $sync_disabled]); ?>
+          </form>
+
+          <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top: 10px;">
+            <?php wp_nonce_field('firewall_sync_cleanup_now', 'firewall_sync_cleanup_now_nonce'); ?>
+            <input type="hidden" name="action" value="firewall_sync_cleanup_now">
+            <?php submit_button('Run Cleanup Now', 'secondary', 'firewall_sync_cleanup_now', false); ?>
           </form>
 
           <details style="margin-top: 20px;">
@@ -63,11 +68,7 @@ final class Settings {
               <?php esc_html_e('View Block Log', 'firewall-sync'); ?>
             </summary>
             <div style="margin-top: 10px;">
-              <?php
-                $log_table = new LogTable();
-                $log_table->prepare_items();
-                $log_table->display();
-              ?>
+              <?php $log_table->display(); ?>
             </div>
           </details>
         </div>

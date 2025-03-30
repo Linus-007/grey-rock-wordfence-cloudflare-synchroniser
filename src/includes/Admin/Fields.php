@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WPCF\FirewallSync\Admin;
 
 use WPCF\FirewallSync\Cloudflare\Client;
+use \WPCF\FirewallSync\Services\SyncScheduler;
 
 final class Fields {
   public static function register(): void {
@@ -13,6 +14,7 @@ final class Fields {
     add_action('admin_post_firewall_sync_test_block', [self::class, 'handle_test_block']);
     add_action('update_option_firewall_sync_options', [self::class, 'maybe_handle_manual_block'], 10, 2);
     add_action('admin_post_firewall_sync_now', [self::class, 'handle_sync_now']);
+    add_action('admin_post_firewall_sync_cleanup_now', [self::class, 'handle_cleanup_now']);
   }
 
   public static function register_settings(): void {
@@ -64,7 +66,7 @@ final class Fields {
 
     check_admin_referer('firewall_sync_now', 'firewall_sync_now_nonce');
 
-    $success = \WPCF\FirewallSync\Services\SyncScheduler::run_now();
+    $success = SyncScheduler::run_now();
 
     add_settings_error(
         'firewall_sync_messages',
@@ -75,7 +77,28 @@ final class Fields {
 
     wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
     exit;
-}
+  }
+
+  public static function handle_cleanup_now(): void {
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized');
+    }
+
+    check_admin_referer('firewall_sync_cleanup_now', 'firewall_sync_cleanup_now_nonce');
+
+    $options = get_option('firewall_sync_options');
+    $client = new Client(
+        $options['cloudflare_api_token'] ?? '',
+        $options['cloudflare_zone_id'] ?? ''
+    );
+
+    SyncScheduler::cleanup_expired($client);
+
+    add_settings_error('firewall_sync_messages', 'cleanup_now', 'Cleanup completed successfully.', 'updated');
+    wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
+
+    exit;
+  }
 
   private static function add_button_field(string $name, string $label): void {
     add_settings_field(
