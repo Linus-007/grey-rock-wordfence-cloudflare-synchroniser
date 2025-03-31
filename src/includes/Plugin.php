@@ -67,8 +67,6 @@ final class Plugin {
     if (is_admin()) {
       Settings::register();
       Fields::register();
-    } else {
-      echo "Not an admin!";
     }
   }
 
