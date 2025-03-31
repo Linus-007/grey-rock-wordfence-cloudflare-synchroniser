@@ -8,20 +8,20 @@ Syncs Wordfence IP blocks to Cloudflare's WAF for high-performance, DNS-level se
 
 ---
 
-## 🔥 Features
+## Features
 
-- ✅ Syncs IP blocks from Wordfence to Cloudflare Firewall Rules
-- ✅ DNS-level blocking to reduce server resource usage
-- ✅ Automatic cron-based syncing
-- ✅ Manual "Sync Now" + "Cleanup Now" buttons
-- ✅ Cloudflare rule reconciliation (detect drift)
-- ✅ Expired block cleanup and retry logic
-- ✅ Built-in logging and admin UI
-- ✅ Multisite-compatible (per-site sync)
+- Syncs IP blocks from Wordfence to Cloudflare Firewall Rules
+- DNS-level blocking to reduce server resource usage
+- Automatic cron-based syncing
+- Manual "Sync Now" + "Cleanup Now" buttons
+- Cloudflare rule reconciliation (detect drift)
+- Expired block cleanup and retry logic
+- Built-in logging and admin UI
+- Multisite-compatible (per-site sync)
 
 ---
 
-## 🧠 How It Works
+## How It Works
 
 - On sync, the plugin reads Wordfence's current block list
 - It pushes valid IPs to Cloudflare's WAF using their API
@@ -30,7 +30,7 @@ Syncs Wordfence IP blocks to Cloudflare's WAF for high-performance, DNS-level se
 
 ---
 
-## 🛠 Installation
+## Installation
 
 1. Clone/download this repo:
    ```bash
@@ -53,13 +53,31 @@ Syncs Wordfence IP blocks to Cloudflare's WAF for high-performance, DNS-level se
 
 ---
 
-## 📦 GitHub Releases
+## Cloudflare Token Permissions
+
+This plugin requires a restricted Cloudflare API token with:
+
+- `Zone → Firewall Services: Edit`
+- `Zone → Zone Settings: Read`
+- `Zone → Zone: Read`
+
+To generate a token:
+
+1. Visit: [https://dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Click “Create Token”
+3. Set the permissions above for your domain
+4. Copy and paste the token into the plugin settings
+
+Do not share this token — treat it like a password.
+
+
+## GitHub Releases
 
 You can also install the plugin from the `.zip` file attached to each [GitHub Release](https://github.com/yourname/wordfence-cloudflare-firewall-sync/releases).
 
 ---
 
-## 🧪 Dev Features
+## Dev Features
 
 - Admin panel with sync status and logs
 - CLI-ready internal architecture
@@ -69,7 +87,7 @@ You can also install the plugin from the `.zip` file attached to each [GitHub Re
 
 ---
 
-## 🚧 Roadmap
+## Roadmap
 
 - [ ] Rule reconciliation fixes
 - [ ] Visual sync/block stats
@@ -78,7 +96,7 @@ You can also install the plugin from the `.zip` file attached to each [GitHub Re
 
 ---
 
-## 🤝 Contributions
+## Contributions
 
 PRs welcome. Please ensure coding style follows PSR-12 with the exception of following 1TBS.
 
@@ -91,12 +109,12 @@ make pot
 
 ---
 
-## 📝 License
+## License
 
 GPLv2 — same as WordPress.
 
 ---
 
-## 🔒 Disclaimer
+## Disclaimer
 
 This plugin is not officially affiliated with Wordfence or Cloudflare. Use at your own risk.
