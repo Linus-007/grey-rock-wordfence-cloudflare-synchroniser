@@ -1,0 +1,49 @@
+.firewall-sync-actions {
+  margin-top: 2em;
+  margin-bottom: 2em;
+
+  form {
+    display: inline-block;
+    margin: 0 10px 0 0;
+
+    @media screen and (max-width: 767px) {
+      display: block;
+      margin: 0 0 10px 0;
+    }
+  }
+
+  h2 {
+    margin-bottom: 0.5em;
+  }
+}
+
+details {
+  summary {
+    font-size: 1.2em;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 5px 0;
+  }
+
+  &[open] {
+    summary {
+      margin-bottom: 10px;
+    }
+  }
+
+  ul {
+    margin: 0 0 0 20px;
+  }
+
+  .settings-error {
+    margin-top: 15px;
+  }
+}
+
+form {
+  table {
+    th {
+      vertical-align: top;
+    }
+  }
+}
