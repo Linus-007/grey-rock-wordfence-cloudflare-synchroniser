@@ -118,7 +118,33 @@ final class Fields {
   }
 
   public static function sanitize(array $input): array {
-    return array_map('sanitize_text_field', $input);
+    $output = [];
+
+    foreach ($input as $key => $value) {
+      $output[$key] = sanitize_text_field($value);
+    }
+
+    $output['cloudflare_mode'] = in_array(
+      $output['cloudflare_mode'] ?? 'zone_access_rules',
+      ['zone_access_rules', 'account_list'],
+      true
+    )
+      ? $output['cloudflare_mode']
+      : 'zone_access_rules';
+
+    foreach ([
+      'cloudflare_api_token',
+      'cloudflare_zone_id',
+      'cloudflare_account_id',
+      'cloudflare_list_id',
+      'cloudflare_list_name',
+    ] as $field) {
+      if (isset($output[$field])) {
+        $output[$field] = trim($output[$field]);
+      }
+    }
+
+    return $output;
   }
 
   public static function maybe_handle_manual_block(array $old_value, array $new_value): void {
