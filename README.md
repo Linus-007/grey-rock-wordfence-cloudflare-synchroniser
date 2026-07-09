@@ -10,8 +10,8 @@ Syncs Wordfence IP blocks to Cloudflare's WAF for high-performance, DNS-level se
 
 ## Features
 
-- Syncs IP blocks from Wordfence to Cloudflare Firewall Rules
-- DNS-level blocking to reduce server resource usage
+- Syncs IP blocks from Wordfence to Cloudflare Zone Access Rules or a Cloudflare account-level IP list
+- Edge-level blocking through Cloudflare to reduce server resource usage
 - Automatic cron-based syncing
 - Manual "Sync Now" + "Cleanup Now" buttons
 - Cloudflare rule reconciliation (detect drift)
@@ -24,7 +24,7 @@ Syncs Wordfence IP blocks to Cloudflare's WAF for high-performance, DNS-level se
 ## How It Works
 
 - On sync, the plugin reads Wordfence's current block list
-- It pushes valid IPs to Cloudflare's WAF using their API
+- It pushes valid IPs to Cloudflare using the selected mode: per-zone Access Rules or an account-level IP list
 - Expired or removed blocks are cleaned up from Cloudflare
 - A database table tracks block history, sync logs, and retry attempts
 
@@ -49,17 +49,56 @@ Syncs Wordfence IP blocks to Cloudflare's WAF for high-performance, DNS-level se
    Settings → Firewall Sync
    ```
 
-5. Enter your Cloudflare API Token and Zone ID
+5. Enter your Cloudflare API token and choose a Cloudflare mode:
+   - **Zone Access Rules**: requires a Cloudflare Zone ID
+   - **Account IP List**: requires a Cloudflare Account ID and List ID
+
+---
+
+## Cloudflare Modes
+
+The plugin supports two Cloudflare blocking modes.
+
+### Zone Access Rules
+
+This is the original behavior. Wordfence blocks are copied to Cloudflare Access Rules for one Cloudflare zone.
+
+Use this mode when you only want to protect one zone.
+
+Required settings:
+
+- Cloudflare API Token
+- Cloudflare Zone ID
+
+### Account IP List
+
+This mode copies Wordfence blocks to a Cloudflare account-level IP list. That list can then be referenced by Cloudflare rules across multiple zones in the same Cloudflare account.
+
+Use this mode when you want a centralized IP block list that can be referenced by multiple Cloudflare zones in the same account.
+
+Required settings:
+
+- Cloudflare API Token
+- Cloudflare Account ID
+- Cloudflare List ID
+
+Optional setting:
+
+- Cloudflare List Name
+
+The list name is currently used as an administrator-facing label only. The Cloudflare API calls use the List ID.
 
 ---
 
 ## Cloudflare Token Permissions
 
-This plugin requires a restricted Cloudflare API token with:
+For **Zone Access Rules** mode, this plugin requires a restricted Cloudflare API token with:
 
 - `Zone → Firewall Services: Edit`
 - `Zone → Zone Settings: Read`
 - `Zone → Zone: Read`
+
+For **Account IP List** mode, use a token that can read and edit account-level Rules Lists for the Cloudflare account that owns the list.
 
 To generate a token:
 
