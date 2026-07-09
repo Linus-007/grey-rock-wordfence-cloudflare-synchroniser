@@ -115,27 +115,7 @@ final class Fields {
   }
 
   public static function maybe_handle_manual_block(array $old_value, array $new_value): void {
-    if (!empty($sanitized['manual_block_ip']) && filter_var($sanitized['manual_block_ip'], FILTER_VALIDATE_IP)) {
-      $client = new Client(
-        $sanitized['cloudflare_api_token'] ?? '',
-        $sanitized['cloudflare_zone_id'] ?? ''
-      );
-
-      $success = $client->create_block($sanitized['manual_block_ip']);
-
-      add_settings_error(
-        'firewall_sync_messages',
-        'manual_block',
-        $success
-          ? __('Successfully blocked IP', Plugin::get_text_domain()) . ": {$sanitized['manual_block_ip']}"
-          : __('Failed to block IP', Plugin::get_text_domain()) . ": {$sanitized['manual_block_ip']}",
-        $success ? 'updated' : 'error'
-      );
-
-      $new_value['manual_block_ip'] = '';
-      update_option('firewall_sync_options', $new_value);
-    }
-
+    // Manual blocks are handled by handle_manual_block().
   }
 
   public static function handle_validate(): void {
@@ -211,13 +191,7 @@ final class Fields {
 
     check_admin_referer('firewall_sync_cleanup_now', 'firewall_sync_cleanup_now_nonce');
 
-    $options = get_option('firewall_sync_options');
-    $client = new Client(
-        $options['cloudflare_api_token'] ?? '',
-        $options['cloudflare_zone_id'] ?? ''
-    );
-
-    SyncScheduler::cleanup_expired($client);
+    SyncScheduler::run_cleanup();
 
     add_settings_error('firewall_sync_messages', 'cleanup_now', __('Cleanup completed successfully.', Plugin::get_text_domain()), 'updated');
     wp_redirect(admin_url('admin.php?page=firewall-sync-settings'));
@@ -266,7 +240,7 @@ final class Fields {
       $options['cloudflare_api_token'] ?? '',
       $options['cloudflare_zone_id'] ?? ''
     );
-    $success = $client->create_test_block($ip);
+    $success = $client->create_block($ip);
 
     if ($success) {
       BlockLogger::log($ip, 'manual: ' . $reason);
