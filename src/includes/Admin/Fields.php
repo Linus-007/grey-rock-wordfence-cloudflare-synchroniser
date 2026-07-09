@@ -36,7 +36,11 @@ final class Fields {
     );
 
     self::add_text_field('cloudflare_api_token', 'Cloudflare API Token', '');
+    self::add_text_field('cloudflare_mode', __('Cloudflare Mode', Plugin::get_text_domain()), 'zone_access_rules or account_list');
     self::add_text_field('cloudflare_zone_id', __('Cloudflare Zone ID', Plugin::get_text_domain()));
+    self::add_text_field('cloudflare_account_id', __('Cloudflare Account ID', Plugin::get_text_domain()));
+    self::add_text_field('cloudflare_list_id', __('Cloudflare List ID', Plugin::get_text_domain()));
+    self::add_text_field('cloudflare_list_name', __('Cloudflare List Name', Plugin::get_text_domain()), 'wordfence_hot_blocklist');
     self::add_text_field('sync_interval', __('Sync Interval (minutes)', Plugin::get_text_domain()), 'e.g., 15, 30, 60');
     self::add_button_field('validate_cf_credentials', __('Validate Cloudflare Credentials', Plugin::get_text_domain()));
     self::add_button_field('test_block', __('Run Test Block', Plugin::get_text_domain()));
