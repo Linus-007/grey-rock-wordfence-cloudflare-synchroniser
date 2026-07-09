@@ -17,6 +17,8 @@ final class SyncScheduler {
     add_action(self::HOOK, [self::class, 'run_now']);
     add_action(self::CLEANUP_HOOK, [self::class, 'run_cleanup']);
     add_filter('cron_schedules', [self::class, 'custom_intervals']);
+
+    $options = get_option('firewall_sync_options');
     
     $minutes = max(5, (int) ($options['sync_interval'] ?? 60));
     $interval_key = $minutes === 5 ? 'every_5_minutes' : ($minutes === 15 ? 'every_15_minutes' : 'hourly');
@@ -85,7 +87,7 @@ final class SyncScheduler {
     $failed = $client->batch_block($batch);
 
     foreach ($batch as $entry) {
-      if (!in_array($entry['ip'], $failed, true)) {
+      if (in_array($entry['ip'], $failed, true)) {
         BlockLogger::mark_failed($entry['ip']);
       } else {
         BlockLogger::log($entry['ip'], 'sync: ' . $entry['reason']);
