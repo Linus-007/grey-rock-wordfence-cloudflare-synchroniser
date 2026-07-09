@@ -36,7 +36,7 @@ final class Fields {
     );
 
     self::add_text_field('cloudflare_api_token', 'Cloudflare API Token', '');
-    self::add_text_field('cloudflare_mode', __('Cloudflare Mode', Plugin::get_text_domain()), 'zone_access_rules or account_list');
+    self::add_mode_field();
     self::add_text_field('cloudflare_zone_id', __('Cloudflare Zone ID', Plugin::get_text_domain()));
     self::add_text_field('cloudflare_account_id', __('Cloudflare Account ID', Plugin::get_text_domain()));
     self::add_text_field('cloudflare_list_id', __('Cloudflare List ID', Plugin::get_text_domain()));
@@ -44,6 +44,34 @@ final class Fields {
     self::add_text_field('sync_interval', __('Sync Interval (minutes)', Plugin::get_text_domain()), 'e.g., 15, 30, 60');
     self::add_button_field('validate_cf_credentials', __('Validate Cloudflare Credentials', Plugin::get_text_domain()));
     self::add_button_field('test_block', __('Run Test Block', Plugin::get_text_domain()));
+  }
+
+  private static function add_mode_field(): void {
+    add_settings_field(
+      'cloudflare_mode',
+      __('Cloudflare Mode', Plugin::get_text_domain()),
+      function (): void {
+        $options = get_option('firewall_sync_options');
+        $value = $options['cloudflare_mode'] ?? 'zone_access_rules';
+
+        printf(
+          '<select id="cloudflare_mode" name="firewall_sync_options[cloudflare_mode]">
+            <option value="zone_access_rules"%1$s>%2$s</option>
+            <option value="account_list"%3$s>%4$s</option>
+          </select>',
+          selected($value, 'zone_access_rules', false),
+          esc_html__('Zone Access Rules', Plugin::get_text_domain()),
+          selected($value, 'account_list', false),
+          esc_html__('Account IP List', Plugin::get_text_domain())
+        );
+
+        echo '<p class="description">';
+        echo esc_html__('Choose Zone Access Rules for legacy per-zone blocking, or Account IP List for account-wide shared list blocking.', Plugin::get_text_domain());
+        echo '</p>';
+      },
+      'firewall-sync-settings',
+      'firewall_sync_main_section'
+    );
   }
 
   private static function add_text_field(string $name, string $label, string $placeholder = ''): void {
