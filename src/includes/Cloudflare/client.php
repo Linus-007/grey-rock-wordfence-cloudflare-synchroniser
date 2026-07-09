@@ -75,6 +75,34 @@ final class Client {
     return $code >= 200 && $code < 300;
   }
 
+  public function find_account_list_item_id_by_ip(string $account_id, string $list_id, string $ip): ?string {
+    if ($account_id === '' || $list_id === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+      return null;
+    }
+
+    $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
+    $response = wp_remote_get($url, $this->get_request_args());
+
+    if (is_wp_error($response)) {
+      return null;
+    }
+
+    if (wp_remote_retrieve_response_code($response) !== 200) {
+      return null;
+    }
+
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+    $items = $body['result'] ?? [];
+
+    foreach ($items as $item) {
+      if (($item['ip'] ?? '') === $ip) {
+        return $item['id'] ?? null;
+      }
+    }
+
+    return null;
+  }
+
   public function create_block(string $ip): bool {
     $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules";
 
