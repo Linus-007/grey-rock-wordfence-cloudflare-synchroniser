@@ -46,6 +46,35 @@ final class Client {
     return wp_remote_retrieve_response_code($response) === 200;
   }
 
+  public function add_ip_to_account_list(string $account_id, string $list_id, string $ip, string $comment = ''): bool {
+    if ($account_id === '' || $list_id === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+      return false;
+    }
+
+    $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
+
+    $item = [
+      'ip' => $ip,
+    ];
+
+    if ($comment !== '') {
+      $item['comment'] = $comment;
+    }
+
+    $response = wp_remote_post($url, [
+      'headers' => $this->get_headers(true),
+      'body' => wp_json_encode([$item]),
+    ]);
+
+    if (is_wp_error($response)) {
+      return false;
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+
+    return $code >= 200 && $code < 300;
+  }
+
   public function create_block(string $ip): bool {
     $url = $this->apiBase . "/zones/{$this->zone}/firewall/access_rules/rules";
 
