@@ -89,10 +89,7 @@ final class Plugin {
 
   public static function run_site_activation(): void {
     $stored_version = get_option('firewall_sync_version');
-
-    if ($stored_version === false) {
-      BlockLogger::create_table();
-    }
+    $stored_version = is_string($stored_version) ? $stored_version : null;
 
     if ($stored_version !== self::get_version()) {
       MigrationManager::run($stored_version);
