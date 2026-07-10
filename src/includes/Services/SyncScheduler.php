@@ -117,20 +117,11 @@ final class SyncScheduler {
     }
 
     if ($mode === 'account_list') {
-      $failed = [];
-
-      foreach ($batch as $entry) {
-        $added = $client->add_ip_to_account_list(
-          $account_id,
-          $list_id,
-          $entry['ip'],
-          'Wordfence sync: ' . $entry['reason']
-        );
-
-        if (!$added) {
-          $failed[] = $entry['ip'];
-        }
-      }
+      $failed = $client->batch_add_ips_to_account_list(
+        $account_id,
+        $list_id,
+        $batch
+      );
     } else {
       $cloudflare_batch = array_map(
         static function (array $entry): array {
