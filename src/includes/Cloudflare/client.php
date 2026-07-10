@@ -4,14 +4,22 @@ declare(strict_types=1);
 
 namespace WPCF\FirewallSync\Cloudflare;
 
-use WP_Error;
-use WP_Http;
 use WPCF\FirewallSync\Plugin;
 
 final class Client {
   private string $token;
   private string $zone;
   private string $apiBase = 'https://api.cloudflare.com/client/v4';
+
+  /**
+   * Account-list items cached for the lifetime of this Client instance.
+   *
+   * Keys identify the Cloudflare account and list. Each value maps an IP
+   * address to its Cloudflare list-item ID.
+   *
+   * @var array<string, array<string, string>>
+   */
+  private array $accountListItemCache = [];
 
   public function __construct(string $token, string $zone) {
     $this->token = $token;
@@ -62,41 +70,276 @@ final class Client {
       return false;
     }
 
-    return $this->find_account_list_item_id_by_ip(
+    $items = $this->get_account_list_item_map(
       $account_id,
-      $list_id,
-      $ip
-    ) !== null;
+      $list_id
+    );
+
+    return $items !== null && array_key_exists($ip, $items);
   }
 
-  public function add_ip_to_account_list(string $account_id, string $list_id, string $ip, string $comment = ''): bool {
-    if ($account_id === '' || $list_id === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+  /**
+   * Add one IP address to an account list.
+   *
+   * Existing entries are treated as successful so synchronization remains
+   * idempotent.
+   */
+  public function add_ip_to_account_list(
+    string $account_id,
+    string $list_id,
+    string $ip,
+    string $comment = ''
+  ): bool {
+    if (
+      $account_id === ''
+      || $list_id === ''
+      || !filter_var($ip, FILTER_VALIDATE_IP)
+    ) {
       return false;
     }
 
-    /*
-     * Multiple WordPress sites may inherit the same network-level
-     * Cloudflare list. Treat an existing item as a successful sync rather
-     * than attempting to create a duplicate.
-     */
-    if ($this->find_account_list_item_id_by_ip($account_id, $list_id, $ip) !== null) {
+    $items = $this->get_account_list_item_map(
+      $account_id,
+      $list_id
+    );
+
+    if ($items === null) {
+      return false;
+    }
+
+    if (array_key_exists($ip, $items)) {
       return true;
     }
 
-    $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
+    $added = $this->create_account_list_item(
+      $account_id,
+      $list_id,
+      $ip,
+      $comment
+    );
 
-    $item = [
-      'ip' => $ip,
-    ];
+    if ($added) {
+      /*
+       * The insertion response is not needed for later operations in this
+       * request. An empty ID is sufficient to preserve membership and avoid
+       * another full-list lookup.
+       */
+      $cache_key = $this->account_list_cache_key(
+        $account_id,
+        $list_id
+      );
+
+      $this->accountListItemCache[$cache_key][$ip] = '';
+    }
+
+    return $added;
+  }
+
+  /**
+   * Add a synchronization batch after loading the account list once.
+   *
+   * @param array<int, array{ip?: string, reason?: string}> $entries
+   * @return array<int, string> IP addresses that could not be synchronized.
+   */
+  public function batch_add_ips_to_account_list(
+    string $account_id,
+    string $list_id,
+    array $entries
+  ): array {
+    $failed = [];
+
+    if ($account_id === '' || $list_id === '') {
+      foreach ($entries as $entry) {
+        $failed[] = (string) ($entry['ip'] ?? '');
+      }
+
+      return $failed;
+    }
+
+    $items = $this->get_account_list_item_map(
+      $account_id,
+      $list_id
+    );
+
+    if ($items === null) {
+      foreach ($entries as $entry) {
+        $failed[] = (string) ($entry['ip'] ?? '');
+      }
+
+      return $failed;
+    }
+
+    $cache_key = $this->account_list_cache_key(
+      $account_id,
+      $list_id
+    );
+
+    foreach ($entries as $entry) {
+      $ip = (string) ($entry['ip'] ?? '');
+
+      if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        $failed[] = $ip;
+        continue;
+      }
+
+      if (array_key_exists($ip, $items)) {
+        continue;
+      }
+
+      $reason = (string) (
+        $entry['reason']
+        ?? __('Unknown', Plugin::get_text_domain())
+      );
+
+      $added = $this->create_account_list_item(
+        $account_id,
+        $list_id,
+        $ip,
+        'Wordfence sync: ' . $reason
+      );
+
+      if (!$added) {
+        $failed[] = $ip;
+        continue;
+      }
+
+      $items[$ip] = '';
+      $this->accountListItemCache[$cache_key][$ip] = '';
+    }
+
+    return $failed;
+  }
+
+  /**
+   * Remove an IP from an account list.
+   *
+   * An already-absent IP is a successful final state.
+   */
+  public function remove_ip_from_account_list(
+    string $account_id,
+    string $list_id,
+    string $ip
+  ): bool {
+    if (
+      $account_id === ''
+      || $list_id === ''
+      || !filter_var($ip, FILTER_VALIDATE_IP)
+    ) {
+      return false;
+    }
+
+    $items = $this->get_account_list_item_map(
+      $account_id,
+      $list_id
+    );
+
+    if ($items === null) {
+      return false;
+    }
+
+    if (!array_key_exists($ip, $items)) {
+      return true;
+    }
+
+    $item_id = $items[$ip];
+
+    /*
+     * A newly inserted cached entry may not have its item ID. Refresh only
+     * in that unusual same-request add-then-remove case.
+     */
+    if ($item_id === '') {
+      $this->clear_account_list_cache($account_id, $list_id);
+
+      $items = $this->get_account_list_item_map(
+        $account_id,
+        $list_id
+      );
+
+      if ($items === null) {
+        return false;
+      }
+
+      if (!array_key_exists($ip, $items)) {
+        return true;
+      }
+
+      $item_id = $items[$ip];
+
+      if ($item_id === '') {
+        return false;
+      }
+    }
+
+    $url = $this->apiBase
+      . "/accounts/{$account_id}/rules/lists/{$list_id}/items/{$item_id}";
+
+    $response = wp_remote_request(
+      $url,
+      [
+        'method' => 'DELETE',
+        'headers' => $this->get_headers(true),
+      ]
+    );
+
+    if (is_wp_error($response)) {
+      return false;
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+    $deleted = $code >= 200 && $code < 300;
+
+    if ($deleted) {
+      $cache_key = $this->account_list_cache_key(
+        $account_id,
+        $list_id
+      );
+
+      unset($this->accountListItemCache[$cache_key][$ip]);
+    }
+
+    return $deleted;
+  }
+
+  /**
+   * Return the current IP addresses in an account list.
+   */
+  public function get_current_account_list_ips(
+    string $account_id,
+    string $list_id
+  ): array {
+    $items = $this->get_account_list_item_map(
+      $account_id,
+      $list_id
+    );
+
+    return $items === null ? [] : array_keys($items);
+  }
+
+  /**
+   * Submit one account-list item without performing another list lookup.
+   */
+  private function create_account_list_item(
+    string $account_id,
+    string $list_id,
+    string $ip,
+    string $comment = ''
+  ): bool {
+    $url = $this->apiBase
+      . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
+
+    $item = ['ip' => $ip];
 
     if ($comment !== '') {
       $item['comment'] = $comment;
     }
 
-    $response = wp_remote_post($url, [
-      'headers' => $this->get_headers(true),
-      'body' => wp_json_encode([$item]),
-    ]);
+    $response = wp_remote_post(
+      $url,
+      [
+        'headers' => $this->get_headers(true),
+        'body' => wp_json_encode([$item]),
+      ]
+    );
 
     if (is_wp_error($response)) {
       return false;
@@ -107,16 +350,42 @@ final class Client {
     return $code >= 200 && $code < 300;
   }
 
-  public function find_account_list_item_id_by_ip(string $account_id, string $list_id, string $ip): ?string {
-    if ($account_id === '' || $list_id === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+  /**
+   * Load and cache all account-list items.
+   *
+   * Null indicates that Cloudflare could not provide a complete list.
+   *
+   * @return array<string, string>|null
+   */
+  private function get_account_list_item_map(
+    string $account_id,
+    string $list_id
+  ): ?array {
+    if ($account_id === '' || $list_id === '') {
       return null;
     }
 
+    $cache_key = $this->account_list_cache_key(
+      $account_id,
+      $list_id
+    );
+
+    if (array_key_exists($cache_key, $this->accountListItemCache)) {
+      return $this->accountListItemCache[$cache_key];
+    }
+
+    $items_by_ip = [];
     $page = 1;
 
     do {
-      $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items?page={$page}&per_page=50";
-      $response = wp_remote_get($url, $this->get_request_args());
+      $url = $this->apiBase
+        . "/accounts/{$account_id}/rules/lists/{$list_id}/items"
+        . "?page={$page}&per_page=50";
+
+      $response = wp_remote_get(
+        $url,
+        $this->get_request_args()
+      );
 
       if (is_wp_error($response)) {
         return null;
@@ -126,89 +395,60 @@ final class Client {
         return null;
       }
 
-      $body = json_decode(wp_remote_retrieve_body($response), true);
+      $body = json_decode(
+        wp_remote_retrieve_body($response),
+        true
+      );
 
-      if (!is_array($body) || !isset($body['result']) || !is_array($body['result'])) {
+      if (
+        !is_array($body)
+        || !isset($body['result'])
+        || !is_array($body['result'])
+      ) {
         return null;
       }
 
-      $items = $body['result'];
+      foreach ($body['result'] as $item) {
+        $ip = (string) ($item['ip'] ?? '');
+        $item_id = (string) ($item['id'] ?? '');
 
-      foreach ($items as $item) {
-        if (($item['ip'] ?? '') === $ip) {
-          return $item['id'] ?? null;
+        if (
+          filter_var($ip, FILTER_VALIDATE_IP)
+          && $item_id !== ''
+        ) {
+          $items_by_ip[$ip] = $item_id;
         }
       }
 
-      $has_more = ($body['result_info']['total_pages'] ?? 1) > $page;
+      $total_pages = max(
+        1,
+        (int) ($body['result_info']['total_pages'] ?? 1)
+      );
+
       $page++;
+    } while ($page <= $total_pages);
 
-    } while ($has_more);
+    $this->accountListItemCache[$cache_key] = $items_by_ip;
 
-    return null;
+    return $items_by_ip;
   }
 
-  public function remove_ip_from_account_list(string $account_id, string $list_id, string $ip): bool {
-    $item_id = $this->find_account_list_item_id_by_ip($account_id, $list_id, $ip);
-
-    if (!$item_id) {
-      return false;
-    }
-
-    $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items/{$item_id}";
-    $response = wp_remote_request($url, [
-      'method' => 'DELETE',
-      'headers' => $this->get_headers(true),
-    ]);
-
-    if (is_wp_error($response)) {
-      return false;
-    }
-
-    $code = wp_remote_retrieve_response_code($response);
-
-    return $code >= 200 && $code < 300;
+  private function account_list_cache_key(
+    string $account_id,
+    string $list_id
+  ): string {
+    return $account_id . ':' . $list_id;
   }
 
-  public function get_current_account_list_ips(string $account_id, string $list_id): array {
-    if ($account_id === '' || $list_id === '') {
-      return [];
-    }
-
-    $ip_list = [];
-    $page = 1;
-
-    do {
-      $url = $this->apiBase . "/accounts/{$account_id}/rules/lists/{$list_id}/items?page={$page}&per_page=50";
-      $response = wp_remote_get($url, $this->get_request_args());
-
-      if (is_wp_error($response)) {
-        break;
-      }
-
-      if (wp_remote_retrieve_response_code($response) !== 200) {
-        break;
-      }
-
-      $body = json_decode(wp_remote_retrieve_body($response), true);
-
-      if (!is_array($body) || !isset($body['result']) || !is_array($body['result'])) {
-        break;
-      }
-
-      $items = $body['result'];
-
-      foreach ($items as $item) {
-        if (!empty($item['ip'])) {
-          $ip_list[] = $item['ip'];
-        }
-      }
-
-      $has_more = ($body['result_info']['total_pages'] ?? 1) > $page;
-      $page += 1;
-    } while ($has_more);
-
-    return array_unique($ip_list);
+  private function clear_account_list_cache(
+    string $account_id,
+    string $list_id
+  ): void {
+    unset(
+      $this->accountListItemCache[
+        $this->account_list_cache_key($account_id, $list_id)
+      ]
+    );
   }
 
   public function create_block(string $ip, string $notes = ''): bool {
