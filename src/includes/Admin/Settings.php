@@ -43,7 +43,7 @@ final class Settings {
         esc_html__('Account IP List mode', Plugin::get_text_domain()) .
         '</strong></p>' .
         '<ul>
-          <li><code>Account → Account Filter Lists: Edit</code></li>
+          <li><code>Account → Account Rule Lists: Edit</code></li>
         </ul>' .
         '<p>' .
         esc_html__(
@@ -62,7 +62,7 @@ final class Settings {
       'content' =>
         '<p>' .
         esc_html__(
-          'Zone Access Rules mode requires a Zone ID. Account IP List mode requires an Account ID and List ID.',
+          'Zone Access Rules mode requires a Zone ID. Account IP List mode requires an Account ID and List Name. The plugin finds the hidden internal List ID automatically.',
           Plugin::get_text_domain()
         ) .
         '</p>' .
@@ -90,8 +90,8 @@ final class Settings {
           Plugin::get_text_domain()
         ) .
         '</p>' .
-        '<p><code>ip.src in $greyrock_wordfence_blocks</code></p>' .
-        '<p><code>ip.src in $greyrock_wordfence_blocks and http.host eq &quot;example.com&quot;</code></p>',
+        '<p><code>ip.src in $wordfence_hot_blocklist</code></p>' .
+        '<p><code>ip.src in $wordfence_hot_blocklist and http.host eq &quot;example.com&quot;</code></p>',
     ]);
   }
 
@@ -235,6 +235,8 @@ final class Settings {
         <?php submit_button(__('Save Settings', Plugin::get_text_domain())); ?>
       </form>
 
+      <?php self::render_mode_visibility_script(); ?>
+
       <hr>
 
       <h2><?php echo esc_html(__('Cloudflare Tests', Plugin::get_text_domain())); ?></h2>
@@ -292,6 +294,8 @@ final class Settings {
         );
         ?>
       </form>
+
+      <?php self::render_manual_list_management($scope); ?>
 
       <?php if (!$network_context): ?>
         <?php
@@ -369,6 +373,175 @@ final class Settings {
         <?php endif; ?>
       <?php endif; ?>
     </div>
+    <?php
+  }
+
+  private static function render_manual_list_management(
+    string $scope
+  ): void {
+    ?>
+    <div id="firewall-sync-manual-list-management">
+      <hr>
+
+      <h2>
+        <?php
+        echo esc_html__(
+          'Manual Account List Management',
+          Plugin::get_text_domain()
+        );
+        ?>
+      </h2>
+
+      <p>
+        <?php
+        echo esc_html__(
+          'Add or remove an IPv4 or IPv6 address from the configured Cloudflare account list. Manually added addresses remain in the list until they are removed.',
+          Plugin::get_text_domain()
+        );
+        ?>
+      </p>
+
+      <form
+        method="post"
+        action="<?php echo esc_url(admin_url('admin-post.php')); ?>"
+      >
+        <?php
+        wp_nonce_field(
+          'firewall_sync_manual_list_ip',
+          'firewall_sync_manual_list_ip_nonce'
+        );
+        ?>
+
+        <input
+          type="hidden"
+          name="action"
+          value="firewall_sync_manual_list_ip"
+        >
+
+        <input
+          type="hidden"
+          name="firewall_sync_scope"
+          value="<?php echo esc_attr($scope); ?>"
+        >
+
+        <p>
+          <label for="firewall_sync_manual_list_ip">
+            <strong>
+              <?php
+              echo esc_html__(
+                'IP address',
+                Plugin::get_text_domain()
+              );
+              ?>
+            </strong>
+          </label>
+        </p>
+
+        <p>
+          <input
+            type="text"
+            id="firewall_sync_manual_list_ip"
+            name="firewall_sync_manual_list_ip"
+            class="regular-text"
+            required
+          >
+        </p>
+
+        <p class="firewall-sync-manual-list-buttons">
+          <button
+            type="submit"
+            name="firewall_sync_list_operation"
+            value="add"
+            class="button button-primary"
+          >
+            <?php
+            echo esc_html__(
+              'Add IP Address',
+              Plugin::get_text_domain()
+            );
+            ?>
+          </button>
+
+          <button
+            type="submit"
+            name="firewall_sync_list_operation"
+            value="remove"
+            class="button button-secondary"
+          >
+            <?php
+            echo esc_html__(
+              'Remove IP Address',
+              Plugin::get_text_domain()
+            );
+            ?>
+          </button>
+        </p>
+      </form>
+    </div>
+
+    <script>
+      (function () {
+        const mode = document.getElementById('cloudflare_mode');
+        const section = document.getElementById(
+          'firewall-sync-manual-list-management'
+        );
+
+        if (!mode || !section) {
+          return;
+        }
+
+        function updateManualListVisibility() {
+          section.style.display =
+            mode.value === 'account_list' ? '' : 'none';
+        }
+
+        mode.addEventListener(
+          'change',
+          updateManualListVisibility
+        );
+
+        updateManualListVisibility();
+      }());
+    </script>
+    <?php
+  }
+
+  private static function render_mode_visibility_script(): void {
+    ?>
+    <script>
+      (function () {
+        const mode = document.getElementById('cloudflare_mode');
+
+        if (!mode) {
+          return;
+        }
+
+        const zoneField = document.getElementById('cloudflare_zone_id');
+        const accountField = document.getElementById('cloudflare_account_id');
+        const listNameField = document.getElementById('cloudflare_list_name');
+
+        const zoneRow = zoneField ? zoneField.closest('tr') : null;
+        const accountRow = accountField ? accountField.closest('tr') : null;
+        const listNameRow = listNameField ? listNameField.closest('tr') : null;
+
+        function show(row, visible) {
+          if (row) {
+            row.style.display = visible ? '' : 'none';
+          }
+        }
+
+        function update() {
+          const accountListMode = mode.value === 'account_list';
+
+          show(zoneRow, !accountListMode);
+          show(accountRow, accountListMode);
+          show(listNameRow, accountListMode);
+        }
+
+        mode.addEventListener('change', update);
+        update();
+      }());
+    </script>
     <?php
   }
 
@@ -453,12 +626,12 @@ final class Settings {
           </h3>
 
           <ul>
-            <li><code>Account → Account Filter Lists: Edit</code></li>
+            <li><code>Account → Account Rule Lists: Edit</code></li>
           </ul>
 
           <p>
             <?php echo esc_html__(
-              'Required settings: Account ID and List ID. The List Name is used in Cloudflare rule expressions.',
+              'Required settings: Account ID and List Name. The plugin finds the hidden internal List ID automatically. Cloudflare Free accounts permit one custom list; the recommended name is wordfence_hot_blocklist.',
               Plugin::get_text_domain()
             ); ?>
           </p>
@@ -482,7 +655,7 @@ final class Settings {
           ); ?>
         </p>
 
-        <p><code>ip.src in $greyrock_wordfence_blocks</code></p>
+        <p><code>ip.src in $wordfence_hot_blocklist</code></p>
 
         <p>
           <?php echo esc_html__(
@@ -492,7 +665,7 @@ final class Settings {
         </p>
 
         <p>
-          <code>ip.src in $greyrock_wordfence_blocks and http.host eq "example.com"</code>
+          <code>ip.src in $wordfence_hot_blocklist and http.host eq "example.com"</code>
         </p>
 
         <p>

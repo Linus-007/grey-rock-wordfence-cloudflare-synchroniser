@@ -10,9 +10,24 @@ final class Reconciler {
     $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
 
     if ($mode === 'account_list') {
-      $cf_ips = $client->get_current_account_list_ips(
-        $options['cloudflare_account_id'] ?? '',
+      $account_id = $options['cloudflare_account_id'] ?? '';
+      $list_id = $client->resolve_account_list_id(
+        $account_id,
+        $options['cloudflare_list_name'] ?? '',
         $options['cloudflare_list_id'] ?? ''
+      );
+
+      if ($list_id === null) {
+        return [
+          'missing_in_cf' => [],
+          'orphaned_in_cf' => [],
+          'error' => $client->get_last_error_message(),
+        ];
+      }
+
+      $cf_ips = $client->get_current_account_list_ips(
+        $account_id,
+        $list_id
       );
     } else {
       $cf_ips = $client->get_current_blocked_ips();

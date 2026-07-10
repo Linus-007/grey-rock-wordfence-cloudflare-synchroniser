@@ -2,7 +2,7 @@
 
 Greyrock Wordfence-Cloudflare Synchroniser synchronises IP addresses blocked by Wordfence with Cloudflare so unwanted traffic can be stopped at Cloudflare's network edge before it reaches the WordPress server.
 
-![Version](https://img.shields.io/badge/version-1.1.1-blue)
+![Version](https://img.shields.io/badge/version-1.1.2-blue)
 ![Built for WordPress](https://img.shields.io/badge/WordPress-6.0+-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-GPLv2-blue)
 
@@ -19,7 +19,7 @@ The existing technical identifiers are intentionally retained for compatibility:
 - plugin directory: `wordfence-cloudflare-firewall-sync`;
 - main plugin file: `index.php`;
 - GitHub repository: `wordfence-cloudflare-firewall-sync`;
-- release ZIP: `wordfence-cloudflare-firewall-sync.zip`;
+- release ZIP: `greyrock-wordfence-cloudflare-synchroniser.zip`;
 - WordPress option names, hooks, database table names and text domain.
 
 Retaining these identifiers allows WordPress to recognise an upgrade as the same installed plugin rather than a different plugin.
@@ -59,7 +59,7 @@ A Cloudflare Global API Key is not required and should not be used.
 ### GitHub release
 
 1. Open the repository Releases page.
-2. Download `wordfence-cloudflare-firewall-sync.zip`.
+2. Download `greyrock-wordfence-cloudflare-synchroniser.zip`.
 3. In WordPress, open **Plugins → Add Plugin → Upload Plugin**.
 4. Select the ZIP file.
 5. Install and activate the plugin.
@@ -124,11 +124,11 @@ Add this permission:
 
 | Scope | Resource | Permission |
 |---|---|---|
-| Account | Account Filter Lists | Edit |
+| Account | Account Rule Lists | Edit |
 
 Restrict the token to the Cloudflare account containing the list.
 
-Cloudflare documentation may refer to this capability as **Account Rule Lists Write**. In the Cloudflare dashboard it is commonly displayed as **Account Filter Lists: Edit**.
+Cloudflare documentation may refer to this capability as **Account Rule Lists Write**. In the Cloudflare dashboard it is commonly displayed as **Account Rule Lists: Edit**.
 
 The token must be able to:
 
@@ -141,7 +141,6 @@ Required plugin settings:
 
 - Cloudflare API Token
 - Cloudflare Account ID
-- Cloudflare List ID
 
 Recommended setting:
 
@@ -171,7 +170,6 @@ Cloudflare identifiers are normally 32-character hexadecimal values.
 2. Select the required account.
 3. Open **Manage Account → Configurations → Lists**.
 4. Create or open an IP list.
-5. Copy the list identifier into **Cloudflare List ID**.
 6. Copy the actual list name into **Cloudflare List Name**.
 
 The List ID and List Name are different values.
@@ -179,7 +177,7 @@ The List ID and List Name are different values.
 | Value | Example | Used for |
 |---|---|---|
 | List ID | `0123456789abcdef0123456789abcdef` | Plugin API requests |
-| List Name | `greyrock_wordfence_blocks` | Cloudflare Custom Rule expressions |
+| List Name | `wordfence_hot_blocklist` | Cloudflare Custom Rule expressions |
 
 Enter the List Name in the plugin without a `$` character.
 
@@ -194,7 +192,7 @@ Do not use spaces, hyphens or capital letters.
 Example:
 
 ```text
-greyrock_wordfence_blocks
+wordfence_hot_blocklist
 ```
 
 ## Making an Account IP List block traffic
@@ -212,24 +210,24 @@ Create a Custom Rule with the **Block** action.
 ### Block listed IP addresses throughout the zone
 
 ```text
-ip.src in $greyrock_wordfence_blocks
+ip.src in $wordfence_hot_blocklist
 ```
 
-Replace `greyrock_wordfence_blocks` with the actual Cloudflare List Name.
+Replace `wordfence_hot_blocklist` with the actual Cloudflare List Name.
 
 The `$` character tells Cloudflare that the name refers to a list variable.
 
 ### Block listed IP addresses for one hostname
 
 ```text
-ip.src in $greyrock_wordfence_blocks
+ip.src in $wordfence_hot_blocklist
 and http.host eq "example.com"
 ```
 
 ### Block listed IP addresses for several hostnames
 
 ```text
-ip.src in $greyrock_wordfence_blocks
+ip.src in $wordfence_hot_blocklist
 and http.host in {"example.com" "www.example.com"}
 ```
 
@@ -240,13 +238,13 @@ The same account-level list can be referenced by Custom Rules in several Cloudfl
 Example for `example.com`:
 
 ```text
-ip.src in $greyrock_wordfence_blocks
+ip.src in $wordfence_hot_blocklist
 ```
 
 Example for `example.net`:
 
 ```text
-ip.src in $greyrock_wordfence_blocks
+ip.src in $wordfence_hot_blocklist
 ```
 
 The plugin updates the account list once. Every Custom Rule that references the list uses the updated contents.
@@ -326,6 +324,23 @@ Cleanup and reconciliation are disabled because one site's local log cannot dete
 
 A site-specific override uses its own Cloudflare settings and local ownership records. Cleanup and reconciliation remain available.
 
+## Manual account-list management
+
+When **Account IP List** mode is selected, the settings page provides:
+
+- **Add IP Address**
+- **Remove IP Address**
+
+Enter a valid IPv4 or IPv6 address.
+
+A manually added address remains in the configured Cloudflare account list until it is removed manually or by another authorised Cloudflare operation.
+
+Removing an address that is already absent is treated as a successful final state.
+
+The manual controls manage the configured list only. Cloudflare blocks the listed addresses only when a Custom Rule references the list, for example:
+
+    ip.src in $wordfence_hot_blocklist
+
 ## Cleanup and retry behaviour
 
 - Failed addresses are retried.
@@ -361,23 +376,23 @@ Check:
 Create a Cloudflare Custom Rule using the actual List Name:
 
 ```text
-ip.src in $greyrock_wordfence_blocks
+ip.src in $wordfence_hot_blocklist
 ```
 
-The List ID cannot be used in a Custom Rule expression.
+The hidden internal List ID is handled automatically and is not used in a Custom Rule expression.
 
 ### The list expression is rejected
 
 Correct:
 
 ```text
-ip.src in $greyrock_wordfence_blocks
+ip.src in $wordfence_hot_blocklist
 ```
 
 Incorrect because `$` is missing:
 
 ```text
-ip.src in greyrock_wordfence_blocks
+ip.src in wordfence_hot_blocklist
 ```
 
 Incorrect because the name contains capitals and hyphens:
@@ -407,13 +422,13 @@ make build
 Create a versioned local release:
 
 ```bash
-make release VERSION=1.1.1
+make release VERSION=1.1.2
 ```
 
 Create and push the Git tag to the writable `fork` remote:
 
 ```bash
-make tag-release VERSION=1.1.1
+make tag-release VERSION=1.1.2
 ```
 
 ## Contributing

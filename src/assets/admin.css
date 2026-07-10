@@ -96,3 +96,11 @@ form table th {
     grid-template-columns: 1fr;
   }
 }
+
+.firewall-sync-manual-list-buttons .button {
+  margin-right: 8px;
+}
+
+#firewall-sync-manual-list-management {
+  max-width: 800px;
+}
