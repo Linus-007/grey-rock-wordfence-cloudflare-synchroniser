@@ -1,7 +1,7 @@
 PLUGIN_SLUG := wordfence-cloudflare-firewall-sync
 PLUGIN_ENTRY := src/index.php
 RELEASE_DIR := dist
-RELEASE_ZIP := $(RELEASE_DIR)/$(PLUGIN_SLUG).zip
+RELEASE_ZIP := $(RELEASE_DIR)/greyrock-wordfence-cloudflare-synchroniser.zip
 BUILD_SCRIPT := scripts/build-release.py
 GIT_REMOTE := fork
 PHP ?= php

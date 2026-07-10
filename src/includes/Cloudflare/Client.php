@@ -22,6 +22,13 @@ final class Client {
   private array $accountListItemCache = [];
 
   /**
+   * Account-list IDs resolved from their visible Cloudflare names.
+   *
+   * @var array<string, string>
+   */
+  private array $accountListIdCache = [];
+
+  /**
    * Most recent Cloudflare or local validation error.
    *
    * @var array{operation: string, message: string, http_code: int|null}|null
@@ -53,32 +60,243 @@ final class Client {
 
   public function validate_account_list(
     string $account_id,
-    string $list_id
+    string $list_name,
+    string $legacy_list_id = ''
   ): bool {
+    return $this->resolve_account_list_id(
+      $account_id,
+      $list_name,
+      $legacy_list_id
+    ) !== null;
+  }
+
+  /**
+   * Resolve a visible Cloudflare account-list name to its internal API ID.
+   *
+   * Cloudflare displays a list variable such as
+   * $wordfence_hot_blocklist, but the ordinary dashboard does not expose
+   * the internal list UUID required by the API.
+   *
+   * The legacy List ID parameter preserves compatibility with existing
+   * installations that already stored the internal ID.
+   */
+  public function resolve_account_list_id(
+    string $account_id,
+    string $list_name,
+    string $legacy_list_id = ''
+  ): ?string {
+    $account_id = trim($account_id);
+    $list_name = ltrim(trim($list_name), '$');
+    $legacy_list_id = trim($legacy_list_id);
+
     if ($account_id === '') {
-      return $this->fail(
-        'validate_account_list',
+      $this->fail(
+        'resolve_account_list',
         __('Cloudflare Account ID is required.', Plugin::get_text_domain())
       );
+
+      return null;
     }
+
+    if ($list_name === '') {
+      if ($legacy_list_id === '') {
+        $this->fail(
+          'resolve_account_list',
+          __('Cloudflare List Name is required.', Plugin::get_text_domain())
+        );
+
+        return null;
+      }
+
+      $cache_key = $account_id . ':legacy:' . $legacy_list_id;
+
+      if (isset($this->accountListIdCache[$cache_key])) {
+        return $this->accountListIdCache[$cache_key];
+      }
+
+      $url = $this->apiBase
+        . "/accounts/{$account_id}/rules/lists/{$legacy_list_id}";
+
+      $response = wp_remote_get($url, $this->get_request_args());
+
+      if (
+        !$this->response_succeeded(
+          'validate_legacy_account_list',
+          $response,
+          [200]
+        )
+      ) {
+        return null;
+      }
+
+      $body = json_decode(
+        wp_remote_retrieve_body($response),
+        true
+      );
+
+      if ((string) ($body['result']['kind'] ?? '') !== 'ip') {
+        $this->fail(
+          'validate_legacy_account_list',
+          __(
+            'The stored Cloudflare list is not an IP list.',
+            Plugin::get_text_domain()
+          )
+        );
+
+        return null;
+      }
+
+      $this->accountListIdCache[$cache_key] = $legacy_list_id;
+      $this->clear_last_error();
+
+      return $legacy_list_id;
+    }
+
+    if (!preg_match('/^[a-z0-9_]{1,50}$/', $list_name)) {
+      $this->fail(
+        'resolve_account_list',
+        __(
+          'Cloudflare List Name may contain only lowercase letters, numbers and underscores.',
+          Plugin::get_text_domain()
+        )
+      );
+
+      return null;
+    }
+
+    $cache_key = $account_id . ':name:' . $list_name;
+
+    if (isset($this->accountListIdCache[$cache_key])) {
+      return $this->accountListIdCache[$cache_key];
+    }
+
+    $matches = [];
+    $page = 1;
+
+    do {
+      $url = $this->apiBase
+        . "/accounts/{$account_id}/rules/lists"
+        . "?page={$page}&per_page=50";
+
+      $response = wp_remote_get(
+        $url,
+        $this->get_request_args()
+      );
+
+      if (
+        !$this->response_succeeded(
+          'list_account_lists',
+          $response,
+          [200]
+        )
+      ) {
+        return null;
+      }
+
+      $body = json_decode(
+        wp_remote_retrieve_body($response),
+        true
+      );
+
+      if (
+        !is_array($body)
+        || !isset($body['result'])
+        || !is_array($body['result'])
+      ) {
+        $this->fail(
+          'list_account_lists',
+          __(
+            'Cloudflare returned an invalid account-list response.',
+            Plugin::get_text_domain()
+          )
+        );
+
+        return null;
+      }
+
+      foreach ($body['result'] as $list) {
+        if ((string) ($list['name'] ?? '') !== $list_name) {
+          continue;
+        }
+
+        $matches[] = [
+          'id' => (string) ($list['id'] ?? ''),
+          'kind' => (string) ($list['kind'] ?? ''),
+        ];
+      }
+
+      $total_pages = max(
+        1,
+        (int) ($body['result_info']['total_pages'] ?? 1)
+      );
+
+      $page++;
+    } while ($page <= $total_pages);
+
+    if (count($matches) === 0) {
+      $this->fail(
+        'resolve_account_list',
+        sprintf(
+          __(
+            'Cloudflare IP list "%s" was not found in this account.',
+            Plugin::get_text_domain()
+          ),
+          $list_name
+        )
+      );
+
+      return null;
+    }
+
+    if (count($matches) > 1) {
+      $this->fail(
+        'resolve_account_list',
+        sprintf(
+          __(
+            'Cloudflare returned more than one list named "%s".',
+            Plugin::get_text_domain()
+          ),
+          $list_name
+        )
+      );
+
+      return null;
+    }
+
+    $list_id = $matches[0]['id'];
+    $kind = $matches[0]['kind'];
 
     if ($list_id === '') {
-      return $this->fail(
-        'validate_account_list',
-        __('Cloudflare List ID is required.', Plugin::get_text_domain())
+      $this->fail(
+        'resolve_account_list',
+        __(
+          'Cloudflare returned a list without an internal ID.',
+          Plugin::get_text_domain()
+        )
       );
+
+      return null;
     }
 
-    $url = $this->apiBase
-      . "/accounts/{$account_id}/rules/lists/{$list_id}";
+    if ($kind !== 'ip') {
+      $this->fail(
+        'resolve_account_list',
+        sprintf(
+          __(
+            'Cloudflare list "%s" is not an IP list.',
+            Plugin::get_text_domain()
+          ),
+          $list_name
+        )
+      );
 
-    $response = wp_remote_get($url, $this->get_request_args());
+      return null;
+    }
 
-    return $this->response_succeeded(
-      'validate_account_list',
-      $response,
-      [200]
-    );
+    $this->accountListIdCache[$cache_key] = $list_id;
+    $this->clear_last_error();
+
+    return $list_id;
   }
 
   /**
@@ -275,42 +493,66 @@ final class Client {
     $item_id = $items[$ip];
 
     /*
-     * A newly inserted cached entry may not have its item ID. Refresh only
-     * in that unusual same-request add-then-remove case.
+     * Cloudflare may not expose a newly added list item immediately.
+     * Retry the item lookup before attempting deletion. Do not report
+     * success merely because the new item has not appeared yet.
      */
     if ($item_id === '') {
-      $this->clear_account_list_cache($account_id, $list_id);
+      $item_id = '';
 
-      $items = $this->get_account_list_item_map(
-        $account_id,
-        $list_id
-      );
+      for ($attempt = 0; $attempt < 5; $attempt++) {
+        if ($attempt > 0) {
+          usleep(500000);
+        }
 
-      if ($items === null) {
-        return false;
+        $this->clear_account_list_cache($account_id, $list_id);
+
+        $items = $this->get_account_list_item_map(
+          $account_id,
+          $list_id
+        );
+
+        if ($items === null) {
+          return false;
+        }
+
+        if (
+          array_key_exists($ip, $items)
+          && $items[$ip] !== ''
+        ) {
+          $item_id = $items[$ip];
+          break;
+        }
       }
-
-      if (!array_key_exists($ip, $items)) {
-        $this->clear_last_error();
-
-        return true;
-      }
-
-      $item_id = $items[$ip];
 
       if ($item_id === '') {
-        return false;
+        return $this->fail(
+          'remove_account_list_item',
+          __(
+            'Cloudflare did not expose the newly added list item in time for deletion. Remove it manually or try again.',
+            Plugin::get_text_domain()
+          )
+        );
       }
     }
 
     $url = $this->apiBase
-      . "/accounts/{$account_id}/rules/lists/{$list_id}/items/{$item_id}";
+      . "/accounts/{$account_id}/rules/lists/{$list_id}/items";
 
     $response = wp_remote_request(
       $url,
       [
         'method' => 'DELETE',
         'headers' => $this->get_headers(true),
+        'body' => wp_json_encode(
+          [
+            'items' => [
+              [
+                'id' => $item_id,
+              ],
+            ],
+          ]
+        ),
       ]
     );
 

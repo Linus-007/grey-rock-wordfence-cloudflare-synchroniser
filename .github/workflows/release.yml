@@ -15,7 +15,7 @@ jobs:
 
     env:
       PLUGIN_SLUG: wordfence-cloudflare-firewall-sync
-      RELEASE_ZIP: dist/wordfence-cloudflare-firewall-sync.zip
+      RELEASE_ZIP: dist/greyrock-wordfence-cloudflare-synchroniser.zip
 
     steps:
       - name: Check out repository
@@ -70,5 +70,5 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/wordfence-cloudflare-firewall-sync.zip
+          files: dist/greyrock-wordfence-cloudflare-synchroniser.zip
           generate_release_notes: true

@@ -31,6 +31,11 @@ final class Fields {
     );
 
     add_action(
+      'admin_post_firewall_sync_manual_list_ip',
+      [self::class, 'handle_manual_list_ip']
+    );
+
+    add_action(
       'admin_post_firewall_sync_now',
       [self::class, 'handle_sync_now']
     );
@@ -76,27 +81,21 @@ final class Fields {
     );
 
     self::add_text_field(
-      'cloudflare_zone_id',
-      __('Cloudflare Zone ID', Plugin::get_text_domain()),
-      __('32-character Zone ID required for Zone Access Rules mode', Plugin::get_text_domain())
-    );
-
-    self::add_text_field(
       'cloudflare_account_id',
       __('Cloudflare Account ID', Plugin::get_text_domain()),
-      __('32-character Account ID required for Account IP List mode', Plugin::get_text_domain())
-    );
-
-    self::add_text_field(
-      'cloudflare_list_id',
-      __('Cloudflare List ID', Plugin::get_text_domain()),
-      __('32-character List ID required for Account IP List mode', Plugin::get_text_domain())
+      __('Required for Account IP List mode', Plugin::get_text_domain())
     );
 
     self::add_text_field(
       'cloudflare_list_name',
       __('Cloudflare List Name', Plugin::get_text_domain()),
-      __('Example: greyrock_wordfence_blocks', Plugin::get_text_domain())
+      __('Recommended: wordfence_hot_blocklist', Plugin::get_text_domain())
+    );
+
+    self::add_text_field(
+      'cloudflare_zone_id',
+      __('Cloudflare Zone ID', Plugin::get_text_domain()),
+      __('Required for Zone Access Rules mode', Plugin::get_text_domain())
     );
 
     self::add_sync_interval_field();
@@ -234,7 +233,7 @@ final class Fields {
 
         $descriptions = [
           'cloudflare_api_token' => __(
-            'Zone Access Rules mode needs Zone → Firewall Services: Edit and Zone → Zone: Read. Account IP List mode needs Account → Account Filter Lists: Edit. DNS editing permission is not required.',
+            'Zone Access Rules mode needs Zone → Firewall Services: Edit and Zone → Zone: Read. Account IP List mode needs Account → Account Rule Lists: Edit. DNS editing permission is not required.',
             Plugin::get_text_domain()
           ),
           'cloudflare_zone_id' => __(
@@ -245,12 +244,8 @@ final class Fields {
             'Use the Account ID for the Cloudflare account that owns the IP list.',
             Plugin::get_text_domain()
           ),
-          'cloudflare_list_id' => __(
-            'The plugin uses the List ID for API requests. Do not enter the List Name here.',
-            Plugin::get_text_domain()
-          ),
           'cloudflare_list_name' => __(
-            'Enter the actual Cloudflare list name without the dollar sign. Use it with a dollar sign in Cloudflare rules, for example: ip.src in $greyrock_wordfence_blocks. List names use lowercase letters, numbers and underscores.',
+            'Enter the visible Cloudflare list name without the dollar sign. The plugin finds the hidden internal List ID automatically. Cloudflare Free accounts permit one custom list, so the recommended name is wordfence_hot_blocklist. Use it in a Cloudflare Custom Rule as: ip.src in $wordfence_hot_blocklist.',
             Plugin::get_text_domain()
           ),
         ];
@@ -361,6 +356,7 @@ final class Fields {
     $result = $mode === 'account_list'
       ? $client->validate_account_list(
         $options['cloudflare_account_id'] ?? '',
+        $options['cloudflare_list_name'] ?? '',
         $options['cloudflare_list_id'] ?? ''
       )
       : $client->validate();
@@ -412,7 +408,25 @@ final class Fields {
 
     if ($mode === 'account_list') {
       $account_id = $options['cloudflare_account_id'] ?? '';
-      $list_id = $options['cloudflare_list_id'] ?? '';
+      $list_id = $client->resolve_account_list_id(
+        $account_id,
+        $options['cloudflare_list_name'] ?? '',
+        $options['cloudflare_list_id'] ?? ''
+      );
+
+      if ($list_id === null) {
+        self::redirect_with_message(
+          $scope,
+          self::client_error_message(
+            $client,
+            __(
+              'The Cloudflare account list could not be resolved.',
+              Plugin::get_text_domain()
+            )
+          ),
+          'error'
+        );
+      }
 
       $already_exists = $client->account_list_contains_ip(
         $account_id,
@@ -469,6 +483,165 @@ final class Fields {
           )
         ),
       $create && $delete ? 'updated' : 'error'
+    );
+  }
+
+  public static function handle_manual_list_ip(): void {
+    check_admin_referer(
+      'firewall_sync_manual_list_ip',
+      'firewall_sync_manual_list_ip_nonce'
+    );
+
+    $scope = self::posted_scope();
+
+    if ($scope === 'network') {
+      self::require_network_capability();
+    } else {
+      self::require_site_capability();
+    }
+
+    $options = self::options_for_scope($scope);
+    $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
+
+    if ($mode !== 'account_list') {
+      self::redirect_with_message(
+        $scope,
+        __(
+          'Manual account-list management is available only in Account IP List mode.',
+          Plugin::get_text_domain()
+        ),
+        'error'
+      );
+    }
+
+    $ip = sanitize_text_field(
+      wp_unslash($_POST['firewall_sync_manual_list_ip'] ?? '')
+    );
+
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+      self::redirect_with_message(
+        $scope,
+        __('Enter a valid IPv4 or IPv6 address.', Plugin::get_text_domain()),
+        'error'
+      );
+    }
+
+    $operation = sanitize_key(
+      wp_unslash($_POST['firewall_sync_list_operation'] ?? '')
+    );
+
+    if (!in_array($operation, ['add', 'remove'], true)) {
+      self::redirect_with_message(
+        $scope,
+        __('Select a valid list operation.', Plugin::get_text_domain()),
+        'error'
+      );
+    }
+
+    $client = new Client(
+      $options['cloudflare_api_token'] ?? '',
+      $options['cloudflare_zone_id'] ?? ''
+    );
+
+    $account_id = $options['cloudflare_account_id'] ?? '';
+    $list_name = ltrim(
+      trim((string) ($options['cloudflare_list_name'] ?? '')),
+      '$'
+    );
+
+    $list_id = $client->resolve_account_list_id(
+      $account_id,
+      $list_name,
+      $options['cloudflare_list_id'] ?? ''
+    );
+
+    if ($list_id === null) {
+      self::redirect_with_message(
+        $scope,
+        self::client_error_message(
+          $client,
+          __(
+            'The Cloudflare account list could not be resolved.',
+            Plugin::get_text_domain()
+          )
+        ),
+        'error'
+      );
+    }
+
+    if ($operation === 'add') {
+      $already_exists = $client->account_list_contains_ip(
+        $account_id,
+        $list_id,
+        $ip
+      );
+
+      if ($already_exists) {
+        self::redirect_with_message(
+          $scope,
+          sprintf(
+            __(
+              'IP address %1$s already exists in Cloudflare list %2$s.',
+              Plugin::get_text_domain()
+            ),
+            $ip,
+            $list_name
+          ),
+          'updated'
+        );
+      }
+
+      $success = $client->add_ip_to_account_list(
+        $account_id,
+        $list_id,
+        $ip,
+        'Manual Greyrock block'
+      );
+
+      $success_message = sprintf(
+        __(
+          'IP address %1$s was added to Cloudflare list %2$s.',
+          Plugin::get_text_domain()
+        ),
+        $ip,
+        $list_name
+      );
+
+      $failure_message = __(
+        'The IP address could not be added to the Cloudflare list.',
+        Plugin::get_text_domain()
+      );
+    } else {
+      $success = $client->remove_ip_from_account_list(
+        $account_id,
+        $list_id,
+        $ip
+      );
+
+      $success_message = sprintf(
+        __(
+          'IP address %1$s was removed from Cloudflare list %2$s.',
+          Plugin::get_text_domain()
+        ),
+        $ip,
+        $list_name
+      );
+
+      $failure_message = __(
+        'The IP address could not be removed from the Cloudflare list.',
+        Plugin::get_text_domain()
+      );
+    }
+
+    self::redirect_with_message(
+      $scope,
+      $success
+        ? $success_message
+        : self::client_error_message(
+          $client,
+          $failure_message
+        ),
+      $success ? 'updated' : 'error'
     );
   }
 
@@ -599,9 +772,29 @@ final class Fields {
     $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
 
     if ($mode === 'account_list') {
+      $account_id = $options['cloudflare_account_id'] ?? '';
+      $list_id = $client->resolve_account_list_id(
+        $account_id,
+        $options['cloudflare_list_name'] ?? '',
+        $options['cloudflare_list_id'] ?? ''
+      );
+
+      if ($list_id === null) {
+        self::redirect_manual_block(
+          self::client_error_message(
+            $client,
+            __(
+              'The Cloudflare account list could not be resolved.',
+              Plugin::get_text_domain()
+            )
+          ),
+          'error'
+        );
+      }
+
       $success = $client->add_ip_to_account_list(
-        $options['cloudflare_account_id'] ?? '',
-        $options['cloudflare_list_id'] ?? '',
+        $account_id,
+        $list_id,
         $ip,
         'Manual block: ' . $reason
       );

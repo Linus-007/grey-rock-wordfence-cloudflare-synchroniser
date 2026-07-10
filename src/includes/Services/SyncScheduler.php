@@ -65,7 +65,8 @@ final class SyncScheduler {
     $zone = $options['cloudflare_zone_id'] ?? '';
     $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
     $account_id = $options['cloudflare_account_id'] ?? '';
-    $list_id = $options['cloudflare_list_id'] ?? '';
+    $list_name = $options['cloudflare_list_name'] ?? '';
+    $legacy_list_id = $options['cloudflare_list_id'] ?? '';
 
     if (empty($token)) {
       self::$lastErrorMessage = __(
@@ -77,9 +78,12 @@ final class SyncScheduler {
     }
 
     if ($mode === 'account_list') {
-      if (empty($account_id) || empty($list_id)) {
+      if (
+        empty($account_id)
+        || (empty($list_name) && empty($legacy_list_id))
+      ) {
         self::$lastErrorMessage = __(
-          'Cloudflare Account ID and List ID are required.',
+          'Cloudflare Account ID and List Name are required.',
           Plugin::get_text_domain()
         );
 
@@ -104,6 +108,24 @@ final class SyncScheduler {
     }
 
     $client = new Client($token, $zone);
+    $list_id = '';
+
+    if ($mode === 'account_list') {
+      $resolved_list_id = $client->resolve_account_list_id(
+        $account_id,
+        $list_name,
+        $legacy_list_id
+      );
+
+      if ($resolved_list_id === null) {
+        self::$lastErrorMessage = $client->get_last_error_message();
+
+        return false;
+      }
+
+      $list_id = $resolved_list_id;
+    }
+
     $blocks = \wfBlock::getBlocks();
     $batch = [];
 
@@ -229,14 +251,18 @@ final class SyncScheduler {
     $zone = $options['cloudflare_zone_id'] ?? '';
     $mode = $options['cloudflare_mode'] ?? 'zone_access_rules';
     $account_id = $options['cloudflare_account_id'] ?? '';
-    $list_id = $options['cloudflare_list_id'] ?? '';
+    $list_name = $options['cloudflare_list_name'] ?? '';
+    $legacy_list_id = $options['cloudflare_list_id'] ?? '';
 
     if (empty($token)) {
       return;
     }
 
     if ($mode === 'account_list') {
-      if (empty($account_id) || empty($list_id)) {
+      if (
+        empty($account_id)
+        || (empty($list_name) && empty($legacy_list_id))
+      ) {
         return;
       }
     } elseif (empty($zone)) {
@@ -244,6 +270,22 @@ final class SyncScheduler {
     }
 
     $client = new Client($token, $zone);
+    $list_id = '';
+
+    if ($mode === 'account_list') {
+      $resolved_list_id = $client->resolve_account_list_id(
+        $account_id,
+        $list_name,
+        $legacy_list_id
+      );
+
+      if ($resolved_list_id === null) {
+        return;
+      }
+
+      $list_id = $resolved_list_id;
+    }
+
     $table = $wpdb->prefix . BlockLogger::TABLE;
     $current_time = current_time('mysql');
 
