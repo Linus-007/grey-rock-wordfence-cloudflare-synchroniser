@@ -27,6 +27,16 @@ final class MigrationManager {
     ) {
       self::migrate_to_1_1_0();
     }
+
+    if (
+      version_compare($to_version, '1.1.1', '>=')
+      && (
+        $from_version === null
+        || version_compare($from_version, '1.1.1', '<')
+      )
+    ) {
+      self::migrate_to_1_1_1();
+    }
   }
 
   private static function migrate_to_1_0_0(): void {
@@ -35,9 +45,6 @@ final class MigrationManager {
 
   /**
    * Preserve configurations created before network inheritance existed.
-   *
-   * Existing site credentials remain site-specific. Sites without an
-   * existing configuration continue to inherit Network Admin defaults.
    */
   private static function migrate_to_1_1_0(): void {
     $options = Config::get_site_options();
@@ -52,7 +59,30 @@ final class MigrationManager {
     }
   }
 
-  private static function has_existing_configuration(array $options): bool {
+  /**
+   * Repair synchronization state and apply the retry-safe table schema.
+   */
+  private static function migrate_to_1_1_1(): void {
+    global $wpdb;
+
+    BlockLogger::create_table();
+
+    $table = $wpdb->prefix . BlockLogger::TABLE;
+
+    /*
+     * Older failed rows received a synced_at timestamp from the former
+     * column default. Mark those rows as unsynchronized so retries work.
+     */
+    $wpdb->query(
+      "UPDATE {$table}
+       SET synced_at = NULL
+       WHERE fail_count > 0"
+    );
+  }
+
+  private static function has_existing_configuration(
+    array $options
+  ): bool {
     foreach ([
       'cloudflare_api_token',
       'cloudflare_zone_id',

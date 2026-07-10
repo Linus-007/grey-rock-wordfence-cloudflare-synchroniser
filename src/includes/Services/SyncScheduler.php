@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace WPCF\FirewallSync\Services;
 
-use WPCF\FirewallSync\Plugin;
-use WPCF\FirewallSync\Config;
 use WPCF\FirewallSync\Cloudflare\Client;
-use WPCF\FirewallSync\Services\BlockLogger;
+use WPCF\FirewallSync\Config;
+use WPCF\FirewallSync\Plugin;
 
 final class SyncScheduler {
   private const HOOK = 'firewall_sync_cron_event';
@@ -45,12 +44,12 @@ final class SyncScheduler {
   public static function custom_intervals(array $schedules): array {
     $schedules['every_5_minutes'] = [
       'interval' => 300,
-      'display' => __('Every 5 Minutes', Plugin::get_text_domain())
+      'display' => __('Every 5 Minutes', Plugin::get_text_domain()),
     ];
 
     $schedules['every_15_minutes'] = [
       'interval' => 900,
-      'display' => __('Every 15 Minutes', Plugin::get_text_domain())
+      'display' => __('Every 15 Minutes', Plugin::get_text_domain()),
     ];
 
     return $schedules;
@@ -86,22 +85,37 @@ final class SyncScheduler {
 
     foreach ($blocks as $block) {
       $ip = $block['ip'] ?? null;
-      $reason = $block['reason'] ?? __('Unknown', Plugin::get_text_domain());
+      $reason = $block['reason']
+        ?? __('Unknown', Plugin::get_text_domain());
       $expiration = (int) ($block['expirationUnix'] ?? 0);
-      $is_permanent = $block['permanent'] ?? false;
+      $is_permanent = !empty($block['permanent']);
 
       if (
-        !$ip ||
-        (!$is_permanent && time() > $expiration) ||
-        BlockLogger::has_synced($ip) ||
-        BlockLogger::is_blacklisted($ip)
+        !$ip
+        || (!$is_permanent && $expiration > 0 && time() > $expiration)
+        || BlockLogger::has_synced($ip)
+        || BlockLogger::is_blacklisted($ip)
       ) {
         continue;
       }
 
-      $batch[] = ['ip' => $ip, 'reason' => $reason];
+      $expires_at = null;
+
+      if (!$is_permanent && $expiration > 0) {
+        $expires_at = wp_date(
+          'Y-m-d H:i:s',
+          $expiration,
+          wp_timezone()
+        );
+      }
+
+      $batch[] = [
+        'ip' => $ip,
+        'reason' => (string) $reason,
+        'expires_at' => $expires_at,
+      ];
     }
-    
+
     if ($mode === 'account_list') {
       $failed = [];
 
@@ -118,18 +132,44 @@ final class SyncScheduler {
         }
       }
     } else {
-      $failed = $client->batch_block($batch);
+      $cloudflare_batch = array_map(
+        static function (array $entry): array {
+          return [
+            'ip' => $entry['ip'],
+            'reason' => $entry['reason'],
+          ];
+        },
+        $batch
+      );
+
+      $failed = $client->batch_block($cloudflare_batch);
     }
 
     foreach ($batch as $entry) {
+      $log_reason = 'sync: ' . $entry['reason'];
+
       if (in_array($entry['ip'], $failed, true)) {
-        BlockLogger::mark_failed($entry['ip']);
-      } else {
-        BlockLogger::log($entry['ip'], 'sync: ' . $entry['reason']);
+        BlockLogger::mark_failed(
+          $entry['ip'],
+          $log_reason,
+          $entry['expires_at']
+        );
+
+        continue;
       }
+
+      BlockLogger::log(
+        $entry['ip'],
+        $log_reason,
+        $entry['expires_at']
+      );
     }
 
-    update_option('firewall_sync_last_run', current_time('mysql'));
+    update_option(
+      'firewall_sync_last_run',
+      current_time('mysql')
+    );
+
     delete_option('firewall_sync_is_running');
 
     return true;
@@ -147,7 +187,7 @@ final class SyncScheduler {
     if (is_multisite() && Config::uses_network_options()) {
       return;
     }
-    
+
     $options = Config::get_effective_options();
     $token = $options['cloudflare_api_token'] ?? '';
     $zone = $options['cloudflare_zone_id'] ?? '';
@@ -168,29 +208,62 @@ final class SyncScheduler {
     }
 
     $client = new Client($token, $zone);
-    
     $table = $wpdb->prefix . BlockLogger::TABLE;
+    $current_time = current_time('mysql');
+
+    $last_id = 0;
 
     do {
       $rows = $wpdb->get_results(
         $wpdb->prepare(
-          "SELECT ip FROM {$table} WHERE expires_at IS NOT NULL AND expires_at < NOW() LIMIT %d",
+          "SELECT id, ip
+           FROM {$table}
+           WHERE id > %d
+             AND synced_at IS NOT NULL
+             AND fail_count = 0
+             AND expires_at IS NOT NULL
+             AND expires_at < %s
+           ORDER BY id ASC
+           LIMIT %d",
+          $last_id,
+          $current_time,
           self::DELETE_BATCH_SIZE
         ),
         ARRAY_A
       );
 
       foreach ($rows as $row) {
+        $row_id = (int) ($row['id'] ?? 0);
         $ip = $row['ip'] ?? null;
 
-        if ($ip) {
-          if ($mode === 'account_list') {
-            $client->remove_ip_from_account_list($account_id, $list_id, $ip);
-          } else {
-            $client->delete_block($ip);
-          }
+        if ($row_id > $last_id) {
+          $last_id = $row_id;
+        }
 
-          $wpdb->delete($table, ['ip' => $ip], ['%s']);
+        if (!$ip) {
+          continue;
+        }
+
+        $deleted = $mode === 'account_list'
+          ? $client->remove_ip_from_account_list(
+            $account_id,
+            $list_id,
+            $ip
+          )
+          : $client->delete_block($ip);
+
+        /*
+         * Retain the ownership record when Cloudflare deletion fails. A
+         * later cleanup run can retry instead of losing track of the entry.
+         * Cursor-based pagination prevents a failed row from being selected
+         * repeatedly during the same cleanup invocation.
+         */
+        if ($deleted) {
+          $wpdb->delete(
+            $table,
+            ['id' => $row_id],
+            ['%d']
+          );
         }
       }
     } while (count($rows) === self::DELETE_BATCH_SIZE);
