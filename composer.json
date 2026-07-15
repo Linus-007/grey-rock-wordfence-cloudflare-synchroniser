@@ -1,0 +1,21 @@
+{
+    "name": "linus-007/grey-rock-block-synchroniser-for-wordfence-and-cloudflare",
+    "description": "Development and security-analysis tools for the Grey Rock Block Synchroniser WordPress plugin.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.1",
+        "squizlabs/php_codesniffer": "^3.13.3",
+        "wp-coding-standards/wpcs": "^3.3"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "security:phpcs": "phpcs --standard=phpcs.xml.dist",
+        "security:audit": "composer audit"
+    }
+}
