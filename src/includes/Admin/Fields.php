@@ -244,7 +244,7 @@ final class Fields {
 
         $descriptions = [
           'cloudflare_api_token' => __(
-            'Zone Access Rules mode needs Zone → Firewall Services: Edit and Zone → Zone: Read. Account IP List mode needs Account → Account Rule Lists: Edit. DNS editing permission is not required.',
+            'Zone Access Rules mode needs Zone → Firewall Services: Edit and Zone → Zone: Read. Account IP List mode needs Account → Account Filter Lists: Edit. DNS editing permission is not required.',
             'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
           ),
           'cloudflare_zone_id' => __(

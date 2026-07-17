@@ -45,7 +45,7 @@ final class Settings {
         esc_html__('Account IP List mode', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare') .
         '</strong></p>' .
         '<ul>
-          <li><code>Account → Account Rule Lists: Edit</code></li>
+          <li><code>Account → Account Filter Lists: Edit</code></li>
         </ul>' .
         '<p>' .
         esc_html__(
@@ -110,8 +110,8 @@ final class Settings {
 
     add_submenu_page(
       'firewall-sync-settings',
-      __('Block Log', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
-      __('Block Log', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+      __('Synchronisation Log', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
+      __('Synchronisation Log', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'),
       'manage_options',
       'firewall-sync-log',
       [self::class, 'render_log']
@@ -228,7 +228,7 @@ final class Settings {
       <h1>
         <?php
         echo esc_html__(
-          'Network Synchronisation Log',
+          'Synchronisation Log',
           'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
         );
         ?>
@@ -325,7 +325,7 @@ final class Settings {
     if (is_network_admin()) {
       wp_die(
         esc_html__(
-          'Block logs are site-specific. Open Grey Rock Block Synchroniser within an individual site.',
+          'Synchronisation logs are site-specific. Open Grey Rock Block Synchroniser within an individual site.',
           'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
         )
       );
@@ -335,7 +335,24 @@ final class Settings {
     $log_table->prepare_items();
     ?>
     <div class="wrap">
-      <h1><?php echo esc_html(__('Grey Rock Synchronisation Log', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare')); ?></h1>
+      <h1>
+        <?php
+        echo esc_html__(
+          'Synchronisation Log',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        ?>
+      </h1>
+
+      <p>
+        <?php
+        echo esc_html__(
+          'This page shows synchronisation records for this site only, including when the site uses the Network Admin configuration.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        ?>
+      </p>
+
       <?php $log_table->display(); ?>
     </div>
     <?php
@@ -746,132 +763,248 @@ final class Settings {
     ?>
     <div class="firewall-sync-guide">
       <h2>
-        <?php echo esc_html__(
+        <?php
+        echo esc_html__(
           'Cloudflare Setup Guide',
           'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-        ); ?>
+        );
+        ?>
       </h2>
 
       <p>
-        <?php echo esc_html__(
-          'Complete these steps before relying on synchronisation. The plugin cannot create the account-list security rule for each domain.',
+        <?php
+        echo esc_html__(
+          'Account IP List mode is recommended for new installations and multisite networks. An Account IP List does not block traffic by itself, so the Custom Rule step is required. Complete every step before relying on synchronisation.',
           'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-        ); ?>
+        );
+        ?>
       </p>
 
       <ol>
         <li>
-          <?php echo esc_html__(
-            'Choose Zone Access Rules for one zone or Account IP List for a reusable list.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
+          <strong>
+            <?php
+            echo esc_html__(
+              'Create the Cloudflare IP list.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </strong>
+
+          <p>
+            <code>
+              Settings → Configurations → Lists → Create new list
+            </code>
+          </p>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'Create an IP list named wordfence_hot_blocklist. Use lowercase letters, numbers and underscores. Enter the list name in Grey Rock without a dollar sign.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
         </li>
+
         <li>
-          <?php echo esc_html__(
-            'Create a restricted Cloudflare API token with the permissions shown below.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
+          <strong>
+            <?php
+            echo esc_html__(
+              'Create a restricted Cloudflare API token.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </strong>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'Create a custom API token with Account → Account Filter Lists → Edit. Restrict the token to the account that owns the list. DNS editing permission and a Global API Key are not required.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
         </li>
+
         <li>
-          <?php echo esc_html__(
-            'Enter the required identifiers and save the settings.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
+          <strong>
+            <?php
+            echo esc_html__(
+              'Copy the Cloudflare Account ID.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </strong>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'Open the Cloudflare account or zone Overview page and copy the Account ID shown in the API section.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
         </li>
+
         <li>
-          <?php echo esc_html__(
-            'Validate the saved configuration and run a test block.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
+          <strong>
+            <?php
+            echo esc_html__(
+              'Configure Grey Rock.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </strong>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'Select Account IP List. Enter the API token, Account ID and List Name. Select the scheduling method, interval, historical lookback and event threshold, and then save the settings.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
         </li>
+
         <li>
-          <?php echo esc_html__(
-            'For Account IP List mode, create a Block Custom Rule in every Cloudflare zone that should use the list.',
-            'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
+          <strong>
+            <?php
+            echo esc_html__(
+              'Create the Cloudflare blocking rule.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </strong>
+
+          <p>
+            <code>
+              Security rules → Create rule → Custom rules
+            </code>
+          </p>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'Create the rule in every Cloudflare zone that should use the list. Choose Block as the action and deploy the rule.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
+
+          <p>
+            <code>ip.src in $wordfence_hot_blocklist</code>
+          </p>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'The dollar sign is required in the Cloudflare rule expression but must not be entered in the Grey Rock List Name field.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
+        </li>
+
+        <li>
+          <strong>
+            <?php
+            echo esc_html__(
+              'Validate and test the configuration.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </strong>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'Select Validate Saved Cloudflare Configuration. Run Test Block with a safe public IP address that is not your current public address and is not already intentionally blocked.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
+        </li>
+
+        <li>
+          <strong>
+            <?php
+            echo esc_html__(
+              'Run synchronisation and review the log.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </strong>
+
+          <p>
+            <?php
+            echo esc_html__(
+              'Select Sync Now or Synchronise Network Now. Site Admin shows only the current site records. Network Admin combines records from every site.',
+              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+            );
+            ?>
+          </p>
         </li>
       </ol>
 
-      <div class="firewall-sync-guide-grid">
-        <section>
-          <h3>
-            <?php echo esc_html__(
-              'Zone Access Rules mode',
-              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-            ); ?>
-          </h3>
+      <h3>
+        <?php
+        echo esc_html__(
+          'Zone Access Rules alternative',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        ?>
+      </h3>
 
-          <ul>
-            <li><code>Zone → Firewall Services: Edit</code></li>
-            <li><code>Zone → Zone: Read</code></li>
-          </ul>
+      <p>
+        <?php
+        echo esc_html__(
+          'For one Cloudflare zone, Zone Access Rules mode uses Zone → Firewall Services → Edit and Zone → Zone → Read. Enter the API token and Zone ID. This mode does not use an account list or a Custom Rule.',
+          'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
+        );
+        ?>
+      </p>
 
-          <p>
-            <?php echo esc_html__(
-              'Required setting: Cloudflare Zone ID.',
-              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-            ); ?>
-          </p>
-        </section>
-
-        <section>
-          <h3>
-            <?php echo esc_html__(
-              'Account IP List mode',
-              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-            ); ?>
-          </h3>
-
-          <ul>
-            <li><code>Account → Account Rule Lists: Edit</code></li>
-          </ul>
-
-          <p>
-            <?php echo esc_html__(
-              'Required settings: Account ID and List Name. The plugin finds the hidden internal List ID automatically. Cloudflare Free accounts permit one custom list; the recommended name is wordfence_hot_blocklist.',
-              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-            ); ?>
-          </p>
-        </section>
-      </div>
-
-      <div class="notice notice-warning inline firewall-sync-list-warning">
-        <p>
-          <strong>
-            <?php echo esc_html__(
-              'Account IP Lists do not block traffic by themselves.',
-              'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-            ); ?>
-          </strong>
-        </p>
-
-        <p>
-          <?php echo esc_html__(
-            'Create a Cloudflare Custom Rule with the Block action:',
+      <p>
+        <a
+          href="https://developers.cloudflare.com/waf/tools/lists/create-dashboard/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <?php
+          echo esc_html__(
+            'Cloudflare list instructions',
             'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
-        </p>
-
-        <p><code>ip.src in $wordfence_hot_blocklist</code></p>
-
-        <p>
-          <?php echo esc_html__(
-            'To apply the list to one hostname only:',
+          );
+          ?>
+        </a>
+        |
+        <a
+          href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <?php
+          echo esc_html__(
+            'Cloudflare API token instructions',
             'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
-        </p>
-
-        <p>
-          <code>ip.src in $wordfence_hot_blocklist and http.host eq "example.com"</code>
-        </p>
-
-        <p>
-          <?php echo esc_html__(
-            'Enter the List Name in this plugin without the dollar sign. Use the dollar sign only in the Cloudflare rule expression.',
+          );
+          ?>
+        </a>
+        |
+        <a
+          href="https://developers.cloudflare.com/waf/custom-rules/create-dashboard/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <?php
+          echo esc_html__(
+            'Cloudflare Custom Rule instructions',
             'grey-rock-block-synchroniser-for-wordfence-and-cloudflare'
-          ); ?>
-        </p>
-      </div>
+          );
+          ?>
+        </a>
+      </p>
     </div>
     <?php
   }

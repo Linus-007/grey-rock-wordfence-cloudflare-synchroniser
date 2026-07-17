@@ -21,8 +21,8 @@ final class LogTable extends WP_List_Table {
 	public function __construct() {
 		parent::__construct(
 			[
-				'singular' => __( 'Firewall Block', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
-				'plural'   => __( 'Firewall Blocks', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
+				'singular' => __( 'Synchronisation Record', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
+				'plural'   => __( 'Synchronisation Records', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ),
 				'ajax'     => false,
 			]
 		);
@@ -60,6 +60,13 @@ final class LogTable extends WP_List_Table {
 			]
 		);
 
+		$this->_column_headers = [
+			$this->get_columns(),
+			[],
+			[],
+			'ip',
+		];
+
 		$this->items = $this->items_data;
 	}
 
@@ -76,6 +83,6 @@ final class LogTable extends WP_List_Table {
 	}
 
 	public function no_items(): void {
-		echo '<p>' . esc_html__( 'No firewall blocks found.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ) . '</p>';
+		echo '<p>' . esc_html__( 'No synchronisation records were found for this site.', 'grey-rock-block-synchroniser-for-wordfence-and-cloudflare' ) . '</p>';
 	}
 }

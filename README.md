@@ -79,7 +79,7 @@ A Cloudflare Global API Key is not required and should not be used.
 3. In WordPress, open **Plugins → Add Plugin → Upload Plugin**.
 4. Select the ZIP file.
 5. Install and activate the plugin.
-6. Open **Firewall Sync** in the WordPress administration menu.
+6. Open **Grey Rock Block Synchroniser** in the WordPress administration menu.
 
 ### Repository installation
 
@@ -119,65 +119,191 @@ When the plugin is network activated:
 - Selecting **External scheduler** or **Manual synchronization only** removes Grey Rock's synchronization WP-Cron event from every inheriting site.
 - Hourly cleanup remains scheduled separately from synchronization.
 - Each site retains its own **Synchronisation Log** and **Manual IP Block** pages.
-- Network Admin provides a combined **Synchronisation Log** containing recent records from all sites.
+- Site Admin shows only the current site's Synchronisation Log, including when that site inherits Network Admin configuration.
+- Network Admin provides a combined **Synchronisation Log** containing recent records from every site.
 - Manual Account List Management requires a reason when adding an address and stores that reason with the Cloudflare list item.
 - Cleanup and reconciliation remain available only where the Cloudflare destination and synchronization ownership records are isolated to one site.
 
-## Cloudflare API token permissions
+## Cloudflare setup for new users
 
-Create a dedicated restricted API token for this plugin.
+### Recommended design: Account IP List
+
+Account IP List mode is recommended for new installations and WordPress
+multisite networks. Grey Rock maintains one Cloudflare account-level IP
+list. A Cloudflare Custom Rule in each protected zone blocks addresses in
+that list.
+
+An Account IP List does not block traffic by itself.
+
+### Step 1: Confirm that Cloudflare protects the domain
+
+1. Sign in to the correct Cloudflare account.
+2. Confirm that the domain is active.
+3. Confirm that DNS records which should receive Cloudflare protection are
+   proxied through Cloudflare.
+
+### Step 2: Create the IP list
 
 Open:
 
-```text
-Cloudflare Dashboard → My Profile → API Tokens → Create Token → Create Custom Token
-```
+    Cloudflare Dashboard → Settings → Configurations → Lists
 
-### Zone Access Rules mode
+Then:
 
-Add these permissions:
+1. Select **Create new list**.
+2. Enter `wordfence_hot_blocklist`.
+3. Choose **IP** as the list type.
+4. Add an optional description.
+5. Create the list.
+
+Use lowercase letters, numbers and underscores in the list name.
+
+Enter this value in Grey Rock:
+
+    wordfence_hot_blocklist
+
+Do not enter the dollar sign in the plugin.
+
+### Step 3: Create the restricted API token
+
+Open the Cloudflare API Tokens page and create a custom token.
+
+Configure:
+
+| Setting | Value |
+|---|---|
+| Permission scope | Account |
+| Permission | Account Filter Lists: Edit |
+| Account resources | The account that owns the list |
+
+The API token must be able to read the list, read list items, add addresses
+and remove addresses. **Edit** grants the required create, read, update,
+delete and list access.
+
+The token does not need DNS editing permission. Do not use the Global API
+Key.
+
+Cloudflare may also expose the underlying API permission name as
+**Account Rule Lists Write**.
+
+### Step 4: Copy the Account ID
+
+1. Open the Cloudflare account or a zone Overview page.
+2. Locate the API section.
+3. Copy the 32-character **Account ID**.
+
+The Account ID is not the account name or domain name.
+
+### Step 5: Configure Grey Rock
+
+Open:
+
+    WordPress Admin → Grey Rock Block Synchroniser
+
+For shared multisite settings:
+
+    Network Admin → Grey Rock Block Synchroniser
+
+Configure the fields in this order:
+
+1. Select **Account IP List**.
+2. Paste the restricted Cloudflare API token.
+3. Paste the Account ID.
+4. Enter `wordfence_hot_blocklist` as the List Name.
+5. Select the scheduling method.
+6. Select the synchronisation interval.
+7. Select the historical WAF lookback.
+8. Select the historical block threshold.
+9. Save the settings.
+
+Grey Rock resolves Cloudflare's internal List ID automatically.
+
+### Step 6: Create the Cloudflare blocking rule
+
+Repeat this step in every Cloudflare zone that should use the list.
+
+Open:
+
+    Cloudflare zone → Security rules → Create rule → Custom rules
+
+In the older Cloudflare dashboard:
+
+    Cloudflare zone → Security → WAF → Custom rules
+
+Configure:
+
+1. Enter a descriptive rule name.
+2. Select the expression editor.
+3. Enter:
+
+    ip.src in $wordfence_hot_blocklist
+
+4. Select **Block** as the action.
+5. Deploy the rule.
+
+The dollar sign identifies a Cloudflare list variable.
+
+To restrict the rule to one hostname:
+
+    ip.src in $wordfence_hot_blocklist
+    and http.host eq "example.com"
+
+To restrict the rule to several hostnames:
+
+    ip.src in $wordfence_hot_blocklist
+    and http.host in {"example.com" "www.example.com"}
+
+### Step 7: Validate the configuration
+
+1. Select **Validate Saved Cloudflare Configuration**.
+2. Confirm that validation succeeds.
+3. Enter a safe public test IP address that:
+   - is not your current public IP;
+   - is not already intentionally blocked; and
+   - does not belong to a required production service.
+4. Select **Run Test Block**.
+5. Confirm that Grey Rock adds and removes the address.
+
+Validation confirms API access. It does not confirm that the Custom Rule
+exists.
+
+### Step 8: Run and verify synchronisation
+
+1. Select **Sync Now** for one site or **Synchronise Network Now** in
+   Network Admin.
+2. Confirm that qualifying addresses appear in the Cloudflare list.
+3. Open **Synchronisation Log**.
+4. Confirm that Site Admin shows only the current site's records.
+5. Confirm that Network Admin combines records from every site.
+
+A site keeps its own Synchronisation Log when it selects
+**Use the Network Admin configuration**. Configuration inheritance controls
+Cloudflare settings; it does not merge site logs.
+
+### Official Cloudflare documentation
+
+- [Create a list](https://developers.cloudflare.com/waf/tools/lists/create-dashboard/)
+- [Create an API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+- [API token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
+- [Create a Custom Rule](https://developers.cloudflare.com/waf/custom-rules/create-dashboard/)
+- [Use lists in expressions](https://developers.cloudflare.com/waf/tools/lists/use-in-expressions/)
+
+## Zone Access Rules alternative
+
+Zone Access Rules mode remains available when one WordPress site should
+manage one Cloudflare zone.
+
+Create a restricted token with:
 
 | Scope | Resource | Permission |
 |---|---|---|
 | Zone | Firewall Services | Edit |
 | Zone | Zone | Read |
 
-Restrict the token to the specific zone or zones the plugin should manage.
+Restrict the token to the required zone. Enter the API token and Zone ID
+in Grey Rock.
 
-The plugin does not require DNS editing permission.
-
-Required plugin settings:
-
-- Cloudflare API Token
-- Cloudflare Zone ID
-
-### Account IP List mode
-
-Add this permission:
-
-| Scope | Resource | Permission |
-|---|---|---|
-| Account | Account Rule Lists | Edit |
-
-Restrict the token to the Cloudflare account containing the list.
-
-Cloudflare documentation may refer to this capability as **Account Rule Lists Write**. In the Cloudflare dashboard it is commonly displayed as **Account Rule Lists: Edit**.
-
-The token must be able to:
-
-- read the list;
-- read existing list items;
-- add IP addresses;
-- remove IP addresses.
-
-Required plugin settings:
-
-- Cloudflare API Token
-- Cloudflare Account ID
-
-Recommended setting:
-
-- Cloudflare List Name
+Zone Access Rules mode does not use an account list or a Custom Rule.
 
 ## Finding Cloudflare identifiers
 
@@ -185,132 +311,25 @@ Cloudflare identifiers are normally 32-character hexadecimal values.
 
 ### Zone ID
 
-1. Open the required domain in the Cloudflare dashboard.
+1. Open the required domain in Cloudflare.
 2. Open the zone **Overview** page.
 3. Locate **Zone ID** in the API section.
 4. Paste it into **Cloudflare Zone ID**.
 
 ### Account ID
 
-1. Open the required Cloudflare account.
-2. Open an account or zone overview page.
-3. Locate **Account ID** in the API section.
-4. Paste it into **Cloudflare Account ID**.
+1. Open the required account or zone Overview page.
+2. Locate **Account ID** in the API section.
+3. Paste it into **Cloudflare Account ID**.
 
-### List ID and List Name
-
-1. Open the Cloudflare dashboard.
-2. Select the required account.
-3. Open **Manage Account → Configurations → Lists**.
-4. Create or open an IP list.
-6. Copy the actual list name into **Cloudflare List Name**.
-
-The List ID and List Name are different values.
+### List Name and List ID
 
 | Value | Example | Used for |
 |---|---|---|
-| List ID | `0123456789abcdef0123456789abcdef` | Plugin API requests |
-| List Name | `wordfence_hot_blocklist` | Cloudflare Custom Rule expressions |
+| List Name | `wordfence_hot_blocklist` | Plugin setup and rule expressions |
+| List ID | `0123456789abcdef0123456789abcdef` | Cloudflare API requests |
 
-Enter the List Name in the plugin without a `$` character.
-
-Cloudflare list names use:
-
-- lowercase letters;
-- numbers;
-- underscores.
-
-Do not use spaces, hyphens or capital letters.
-
-Example:
-
-```text
-wordfence_hot_blocklist
-```
-
-## Making an Account IP List block traffic
-
-The plugin populates the list. It does not automatically create the per-zone security rule.
-
-For every Cloudflare zone that should use the list, open:
-
-```text
-Cloudflare zone → Security → WAF → Custom rules
-```
-
-Create a Custom Rule with the **Block** action.
-
-### Block listed IP addresses throughout the zone
-
-```text
-ip.src in $wordfence_hot_blocklist
-```
-
-Replace `wordfence_hot_blocklist` with the actual Cloudflare List Name.
-
-The `$` character tells Cloudflare that the name refers to a list variable.
-
-### Block listed IP addresses for one hostname
-
-```text
-ip.src in $wordfence_hot_blocklist
-and http.host eq "example.com"
-```
-
-### Block listed IP addresses for several hostnames
-
-```text
-ip.src in $wordfence_hot_blocklist
-and http.host in {"example.com" "www.example.com"}
-```
-
-### Use one list with several domains
-
-The same account-level list can be referenced by Custom Rules in several Cloudflare zones within the same account.
-
-Example for `example.com`:
-
-```text
-ip.src in $wordfence_hot_blocklist
-```
-
-Example for `example.net`:
-
-```text
-ip.src in $wordfence_hot_blocklist
-```
-
-The plugin updates the account list once. Every Custom Rule that references the list uses the updated contents.
-
-## Configuring the plugin
-
-Open:
-
-```text
-WordPress Admin → Grey Rock Block Synchroniser
-```
-
-For multisite network settings:
-
-```text
-Network Admin → Grey Rock Block Synchroniser
-```
-
-Complete the setup in this order:
-
-1. Select **Zone Access Rules** or **Account IP List**.
-2. Enter the Cloudflare Account ID when using Account IP List mode.
-3. Paste the restricted Cloudflare API token.
-4. Enter the remaining identifiers required by the selected mode.
-5. In Account IP List mode, enter the actual Cloudflare List Name.
-6. Select **WordPress WP-Cron**, **External scheduler** or **Manual synchronization only**.
-7. Select the synchronization interval.
-8. Save the settings.
-9. Select **Validate Saved Cloudflare Configuration**.
-10. Run a test block with an IP address that is not already intentionally blocked.
-11. Confirm the address was added and removed.
-12. Select **Sync Now**.
-13. Verify the resulting rule or list entry in Cloudflare.
+Grey Rock finds the internal List ID automatically.
 
 ## Scheduling
 
@@ -798,6 +817,16 @@ The generated release file is:
     dist/grey-rock-block-synchroniser-for-wordfence-and-cloudflare.zip
 
 ## Changelog
+
+### 1.2.2
+
+- Corrected Synchronisation Log table rendering when stored records and pagination were present.
+- Standardised Site Admin and Network Admin log menu labels and page headings.
+- Confirmed that Site Admin logs remain site-specific when network configuration is inherited.
+- Retained the combined Network Admin log across all sites.
+- Updated Cloudflare list-permission terminology and dashboard navigation.
+- Added step-by-step Cloudflare list, API token, Custom Rule and verification instructions.
+- Added a static regression test for log rendering, naming, scope and documentation.
 
 ### 1.2.1
 

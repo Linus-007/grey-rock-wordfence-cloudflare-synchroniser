@@ -25,6 +25,8 @@ validate:
 	@find src -type f -name '*.php' -print0 | xargs -0 -n1 $(PHP) -l
 	@echo "Validating release builder..."
 	@$(PYTHON) -m py_compile "$(BUILD_SCRIPT)"
+	@echo "Running static regression checks..."
+	@$(PHP) tests/static/log-ui-regression.php
 	@echo "Checking plugin metadata..."
 	@grep -q '^ \* License: GPLv2 or later$$' "$(PLUGIN_ENTRY)"
 	@grep -q '^ \* Text Domain: grey-rock-block-synchroniser-for-wordfence-and-cloudflare$$' "$(PLUGIN_ENTRY)"

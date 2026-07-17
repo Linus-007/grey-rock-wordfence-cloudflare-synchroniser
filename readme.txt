@@ -4,7 +4,7 @@ Tags: wordfence, cloudflare, firewall, security, multisite
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -108,7 +108,8 @@ When network activated:
 * Individual sites may inherit the network configuration.
 * Site-specific overrides can be permitted by Network Admin.
 * Network Admin provides a Synchronise Network Now action.
-* Network Admin provides a combined Synchronisation Log.
+* Each site has a Synchronisation Log containing only that site's records, including when it inherits Network Admin configuration.
+* Network Admin provides a combined Synchronisation Log containing recent records from every site.
 * Individual sites retain their own synchronisation logs and manual IP block pages.
 * Sites using independent settings retain their own site-level controls.
 
@@ -197,46 +198,69 @@ Uninstalling the plugin removes its local plugin options and tables according to
 == Installation ==
 
 1. Install and activate Wordfence.
-2. Install and activate Grey Rock Block Synchroniser for Wordfence and Cloudflare.
-3. Open Grey Rock Block Synchroniser in WordPress administration.
-4. Select Zone Access Rules or Account IP List mode.
-5. Create a restricted Cloudflare API token.
-6. Enter the Cloudflare identifiers required for the selected mode.
-7. Save the settings.
-8. Validate the saved Cloudflare configuration.
-9. Run the diagnostic test block.
-10. Configure the historical WAF lookback and event threshold.
-11. Run synchronisation.
+2. Install and activate Grey Rock Block Synchroniser for Wordfence and
+   Cloudflare.
+3. Open **Grey Rock Block Synchroniser** in WordPress Admin.
+4. For shared multisite settings, open the plugin in Network Admin.
 
-For multisite installations, network activate the plugin and configure shared settings from Network Admin when appropriate.
+= Recommended Account IP List setup =
 
-= Zone Access Rules mode =
+1. In Cloudflare, open **Settings → Configurations → Lists**.
+2. Select **Create new list**.
+3. Create an IP list named `wordfence_hot_blocklist`.
+4. Create a restricted Cloudflare custom API token.
+5. Add **Account → Account Filter Lists → Edit**.
+6. Restrict the token to the account that owns the list.
+7. Copy the API token.
+8. Copy the Account ID from the Cloudflare account or zone Overview page.
+9. In Grey Rock, select **Account IP List**.
+10. Enter the API token, Account ID and List Name.
+11. Enter the List Name without the dollar sign.
+12. Select the scheduling method, interval, historical lookback and event
+    threshold.
+13. Save the settings.
+14. Select **Validate Saved Cloudflare Configuration**.
+15. Run a test block using a safe public IP address.
 
-Required settings:
+The token does not need DNS editing permission. Do not use a Global API
+Key.
 
-* Cloudflare API Token
-* Cloudflare Zone ID
+= Create the Cloudflare blocking rule =
 
-Required Cloudflare token permissions:
+An Account IP List does not block traffic by itself.
 
-* Zone - Firewall Services: Edit
-* Zone - Zone: Read
+Repeat these steps in every protected Cloudflare zone:
 
-= Account IP List mode =
+1. Open **Security rules → Create rule → Custom rules**.
+2. Enter a descriptive rule name.
+3. Enter `ip.src in $wordfence_hot_blocklist`.
+4. Select **Block** as the action.
+5. Deploy the rule.
 
-Required settings:
+In the older Cloudflare dashboard, use
+**Security → WAF → Custom rules**.
 
-* Cloudflare Account ID
-* Cloudflare API Token
-* Cloudflare List Name
+= Verify operation =
 
-Required Cloudflare token permission:
+1. Select **Sync Now** or **Synchronise Network Now**.
+2. Confirm that qualifying addresses appear in the Cloudflare list.
+3. Open **Synchronisation Log**.
+4. Confirm that Site Admin shows only the current site's records.
+5. Confirm that Network Admin combines records from every site.
 
-* Account - Account Rule Lists: Edit
+A site keeps its own Synchronisation Log when it uses Network Admin
+configuration. Configuration inheritance does not expose another site's
+records in Site Admin.
 
-The plugin resolves the Cloudflare list's internal identifier automatically.
+= Zone Access Rules alternative =
 
-After configuring the list, create a Cloudflare Custom Rule with the Block action in every zone that should use it.
+For one zone, select **Zone Access Rules** and create a token with:
+
+* Zone → Firewall Services → Edit
+* Zone → Zone → Read
+
+Enter the token and Zone ID in Grey Rock. This mode does not use an
+account list or a Custom Rule.
 
 == Frequently Asked Questions ==
 
@@ -326,6 +350,16 @@ No.
 6. Configure a Cloudflare Custom Rule to block requests from addresses contained in the synchronised IP list.
 
 == Changelog ==
+
+= 1.2.2 =
+
+* Corrected Synchronisation Log table rendering.
+* Standardised Site Admin and Network Admin log labels and headings.
+* Kept Site Admin logs site-specific when network settings are inherited.
+* Retained the combined Network Admin log across all sites.
+* Updated Cloudflare permission terminology and dashboard navigation.
+* Added step-by-step Cloudflare setup and verification instructions.
+* Added a static log and documentation regression test.
 
 = 1.2.1 =
 
@@ -435,6 +469,10 @@ No.
 * Updated Grey Rock branding and release packaging.
 
 == Upgrade Notice ==
+
+= 1.2.2 =
+
+Corrects Synchronisation Log rendering and naming, preserves multisite log scope and adds complete Cloudflare setup instructions.
 
 = 1.2.1 =
 
